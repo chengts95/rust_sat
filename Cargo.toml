@@ -1,0 +1,47 @@
+[package]
+name = "rust_sat"
+version = "0.1.0"
+edition = "2021"
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[target.wasm32-unknown-unknown]
+runner = "wasm-server-runner"
+
+
+
+[dependencies.crossterm]
+version = ">=0.25"
+[dependencies.tui]
+version = ">=0.19"
+
+[dependencies]
+zmq = {version = ">=0.9.2", features=["vendored"]}
+rmp = ">=0.8"
+rmp-serde = ">=0.15"
+egui=">=0.18.0"
+bevy = ">=0.8.0"
+bevy_egui = ">=0.14"
+bevy_reflect = ">=0.8.0"
+plotters = ">=0.3.2"
+plotters-bitmap  = ">=0.3.2"
+openssl = { version = ">=0.10", features = ["vendored"] }
+hyper   = "*"
+reqwest = { version = "*", features = ["json"] }
+tokio = { version = ">=1", features = ["full"] }
+serde_json = "*"
+serde_derive = "*"
+serde = "*"
+egui_extras= {version = ">=0.18", features=["svg"]}
+derive_more = "0.99.17"
+sgp4 = ">0.6"
+map_3d = ">=0.1.5"
+chrono = ">=0.4"
+rfd = ">=0.10"
+tuirealm =  {git="https://github.com/veeso/tui-realm"}
+tui-textarea = {git="https://github.com/rhysd/tui-textarea"}
+tui-realm-stdlib ={git="https://github.com/veeso/tui-realm-stdlib"} 
+tui-realm-textarea = {path="./tui-realm-textarea"}
+bevy_svg = { git = "https://github.com/Weasy666/bevy_svg", branch = "main", default-features = false, features = ["2d"] }
+[patch.crates-io]
+tuirealm =  {git="https://github.com/veeso/tui-realm"}
