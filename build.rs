@@ -10,5 +10,5 @@ fn main() {
     //options.set_encryption_key(key);
     options.encode_file_names = true;
     options.enabled_on_debug_build = true;
-    AssetBundler::from(options).build();//.unwrap();
+    AssetBundler::from(options).build(); //.unwrap();
 }

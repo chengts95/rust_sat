@@ -9,7 +9,6 @@ use crossterm::{
     execute,
     terminal::{enable_raw_mode, EnterAlternateScreen},
 };
-use tui_textarea::TextArea;
 
 use std::io::{stdout, Write};
 use tui::{
@@ -27,10 +26,7 @@ struct QueryConfig {
     timer: Timer,
 }
 
-use std::{
-
-    time::{Duration, UNIX_EPOCH},
-};
+use std::time::{Duration, UNIX_EPOCH};
 
 use chrono::Datelike;
 use chrono::{DateTime, TimeZone, Timelike, Utc};
@@ -225,7 +221,6 @@ impl Plugin for SGP4Plugin {
     }
 }
 
-
 struct RefreshConfig {
     timer: Timer,
 }
@@ -242,8 +237,6 @@ struct QueriedEvent;
 
 #[derive(Default, Component)]
 struct UIData(HashMap<String, i32>);
-
-
 
 // fn show_data(
 //     mut egui_context: ResMut<EguiContext>,
@@ -372,7 +365,6 @@ fn show_data2(
             }
             newsel %= 2;
             uidata.0.insert("tab_selection".to_string(), newsel);
-
         }
     }
 }

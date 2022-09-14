@@ -30,7 +30,6 @@ pub struct CElements(sgp4::Elements);
 #[derive(Default, Component, From, Into)]
 pub struct SatName(pub String);
 
-
 #[derive(Default, Component, From, Into)]
 pub struct SatID(pub u64);
 

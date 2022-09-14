@@ -1,10 +1,6 @@
 use bevy::{prelude::*, window::WindowResized};
 use bevy_prototype_lyon::prelude::*;
 
-use egui::color_picker::color_picker_hsva_2d;
-use openssl::derive;
-use tokio::runtime::Runtime;
-
 use crate::{celestrak::SatID, SatConfigs};
 
 use super::celestrak::LatLonAlt;
@@ -28,7 +24,7 @@ fn google_scaler_define(mut proj: ResMut<GoogleProjector>, mut events: EventRead
 }
 
 fn show_label(
-    mut cam: Query<&OrthographicProjection, Changed<OrthographicProjection>>,
+    cam: Query<&OrthographicProjection, Changed<OrthographicProjection>>,
     mut q: Query<&mut Visibility, With<SatLabel>>,
 ) {
     if !cam.is_empty() {
@@ -89,7 +85,7 @@ fn shape_satellite(
     mut commands: Commands,
     color: Res<SatConfigs>,
     q: Query<(Entity, &WorldCoord, &Name), Added<WorldCoord>>,
-    fonts: Query<(&Handle<Font>)>,
+    fonts: Query<&Handle<Font>>,
 ) {
     if q.is_empty() {
         return;

@@ -6,7 +6,6 @@ use bevy::{
     asset::AssetPlugin,
     input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
     prelude::*,
-    render::camera::{ScalingMode, WindowOrigin},
     window::WindowResized,
 };
 use bevy_assets_bundler::{AssetBundlingOptions, BundledAssetIoPlugin};
@@ -37,7 +36,7 @@ struct UIData(HashMap<String, String>);
 
 use celestrak::*;
 use render_satellite::*;
-use serde::__private::de;
+
 use tokio::runtime::Runtime;
 #[derive(Default)]
 struct SatConfigs {
@@ -96,7 +95,7 @@ fn show_data(
             .collect();
 
         if ui.button("apply to map").clicked() {
-            vis.for_each_mut(|(mut y)| {
+            vis.for_each_mut(|mut y| {
                 y.is_visible = false;
             });
             for i in &satcfg.visible {
