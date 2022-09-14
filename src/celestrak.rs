@@ -30,8 +30,6 @@ pub struct CElements(sgp4::Elements);
 #[derive(Default, Component, From, Into)]
 pub struct SatName(pub String);
 
-#[derive(Default, Component, From, Into)]
-pub struct Name(pub String);
 
 #[derive(Default, Component, From, Into)]
 pub struct SatID(pub u64);
@@ -52,6 +50,15 @@ pub struct TLETimeStamp(pub i64);
 #[derive(Default, Serialize, Deserialize)]
 pub struct SatInfo {
     pub sats: HashMap<u64, sgp4::Elements>,
+}
+pub fn get_name(data: &Res<SatInfo>, id: &&SatID) -> String {
+    data.sats
+        .get(&id.0)
+        .unwrap()
+        .object_name
+        .as_ref()
+        .unwrap()
+        .to_owned()
 }
 
 fn update_data(
@@ -136,12 +143,13 @@ fn update_every_sat(mut cmd: Commands, satdata: Res<SatInfo>, sats: Query<(Entit
     if satdata.is_changed() {
         sats.for_each(|(e, id)| {
             if !satdata.sats.contains_key(&id.0) {
-                cmd.entity(e).despawn();
+                cmd.entity(e).despawn_recursive();
             } else {
                 let s = satdata.sats.get(&id.0).unwrap();
                 let constants = sgp4::Constants::from_elements(s).unwrap();
                 cmd.entity(e).insert(SGP4Constants(constants));
                 cmd.entity(e).insert(TLETimeStamp(s.datetime.timestamp()));
+                cmd.entity(e).insert(Name::from(get_name(&satdata, &id)));
             }
         });
     }
@@ -162,8 +170,14 @@ pub fn init_sat_data(mut cmd: Commands, rt: Res<Runtime>) {
         let constants = sgp4::Constants::from_elements(elements).unwrap();
         let ts = TLETimeStamp(elements.datetime.timestamp());
         let (pos, vel) = propagate_sat(ts.0 as f64, &constants);
-        cmd.spawn()
-            .insert_bundle((id, SGP4Constants(constants), ts, pos, vel));
+        cmd.spawn().insert_bundle((
+            id,
+            SGP4Constants(constants),
+            ts,
+            pos,
+            vel,
+            Name::from(elements.object_name.as_ref().unwrap().clone()),
+        ));
     }
     cmd.insert_resource(sat_info);
 }

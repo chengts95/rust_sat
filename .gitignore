@@ -1,1 +1,4 @@
 /target
+*.exe
+*.bin
+*.zip

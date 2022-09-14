@@ -20,7 +20,6 @@ zmq = {version = ">=0.9.2", features=["vendored"]}
 rmp = ">=0.8"
 rmp-serde = ">=0.15"
 egui=">=0.18.0"
-bevy = ">=0.8.0"
 bevy_egui = ">=0.14"
 bevy_reflect = ">=0.8.0"
 plotters = ">=0.3.2"
@@ -43,5 +42,73 @@ tui-textarea = {git="https://github.com/rhysd/tui-textarea"}
 tui-realm-stdlib ={git="https://github.com/veeso/tui-realm-stdlib"} 
 tui-realm-textarea = {path="./tui-realm-textarea"}
 bevy_svg = { git = "https://github.com/Weasy666/bevy_svg", branch = "main", default-features = false, features = ["2d"] }
+googleprojection = ">=1.2.0"
+bevy_prototype_lyon= "*"
+bevy_assets_bundler = ">=0.4"
+
+[build-dependencies]
+bevy_assets_bundler = ">=0.4"
 [patch.crates-io]
 tuirealm =  {git="https://github.com/veeso/tui-realm"}
+
+[dependencies.bevy]
+version = ">=0.8"
+# Disable the default features if there are any that you do not want
+default-features = false
+features = [
+  # These are the default features:
+  # (re-enable whichever you like)
+
+  # Bevy functionality:
+  "bevy_asset",         # Assets management
+  "bevy_scene",         # Scenes management
+  "bevy_gilrs",         # Gamepad input support
+  "bevy_audio",         # Builtin audio
+  "bevy_winit",         # Window management
+  "animation",          # Animation support
+  "x11",                # Linux: Support X11 windowing system
+  "filesystem_watcher", # Asset hot-reloading
+  #"render",             # Graphics Rendering
+
+  ## "render" actually just includes:
+  ## (feel free to use just a subset of these, instead of "render")
+  "bevy_render",        # Rendering framework core
+  "bevy_core_pipeline", # Common rendering abstractions
+  "bevy_sprite",        # 2D (sprites) rendering
+  #"bevy_pbr",           # 3D (physically-based) rendering
+  #"bevy_gltf",          # GLTF 3D assets format support
+  "bevy_text",          # Text/font rendering
+  "bevy_ui",            # UI toolkit
+
+  # File formats:
+  "png",
+  "hdr",
+  "vorbis",
+
+  # These are other features that may be of interest:
+  # (add any of these that you need)
+
+  # Bevy functionality:
+  #"wayland",              # Linux: Support Wayland windowing system
+  "subpixel_glyph_atlas", # Subpixel antialiasing for text/fonts
+  "serialize",            # Support for `serde` Serialize/Deserialize
+
+  # File formats:
+  "ktx2", # preferred format for GPU textures
+  "dds",
+  "jpeg",
+  "bmp",
+  "tga",
+  "basis-universal",
+  "zstd", # needed if using zstd in KTX2 files
+  "flac",
+  "mp3",
+  "wav",
+
+  # Development/Debug features:
+  #"dynamic",      # Dynamic linking for faster compile-times
+  #"trace",        # Enable tracing for performance measurement
+  #"trace_tracy",  # Tracing using `tracy`
+  #"trace_chrome", # Tracing using the Chrome format
+  #"wgpu_trace",   # WGPU/rendering tracing
+]
