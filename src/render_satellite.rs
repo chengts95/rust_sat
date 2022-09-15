@@ -64,25 +64,25 @@ fn wgs84_scaler_define(mut proj: ResMut<GoogleProjector>, mut events: EventReade
     }
 }
 fn google_scaler_define(mut proj: ResMut<GoogleProjector>, mut events: EventReader<WindowResized>) {
-    for i in events.iter() {
+    for _i in events.iter() {
         proj.zoom = 2; //(i.height as i32)/proj.tilesize;
 
         let l = (2 as i32).pow(proj.zoom as u32);
-        let f1 = (l * 256) as f32;
+        let _f1 = (l * 256) as f32;
         proj.scaler[1] = 1.0; //i.height/f1;
         proj.scaler[0] = 1.0 //i.width/f1;
     }
 }
 
 fn show_label(
-    cam: Query<&OrthographicProjection, (Changed<OrthographicProjection>)>,
-    cam2: Query<&OrthographicProjection, (Added<OrthographicProjection>)>,
+    cam: Query<&OrthographicProjection, Changed<OrthographicProjection>>,
+    cam2: Query<&OrthographicProjection, Added<OrthographicProjection>>,
     mut q: Query<&mut Visibility, With<SatLabel>>,
 ) {
-      let factor = 256.0;
+    let factor = 256.0;
     if !cam.is_empty() {
         let a = cam.single();
-      
+
         let not_visible = a.scale > factor;
         q.for_each_mut(|mut f| {
             f.is_visible = !not_visible;
@@ -90,7 +90,7 @@ fn show_label(
     }
     if !cam2.is_empty() {
         let a = cam2.single();
-        let not_visible = a.scale > factor ;
+        let not_visible = a.scale > factor;
         q.for_each_mut(|mut f| {
             f.is_visible = !not_visible;
         });
@@ -102,7 +102,7 @@ fn google_world_coord(
     q2: Query<(Entity, &LatLonAlt), Added<LatLonAlt>>,
     proj: Res<GoogleProjector>,
 ) {
-    q.for_each_mut(|(e, lla, mut w)| {
+    q.for_each_mut(|(_e, lla, mut w)| {
         let coord = add_world_coord(lla, &proj);
         w.0 = coord;
     });
@@ -118,7 +118,7 @@ fn wgs84_world_coord(
     q2: Query<(Entity, &LatLonAlt), Added<LatLonAlt>>,
     proj: Res<GoogleProjector>,
 ) {
-    q.for_each_mut(|(e, lla, mut w)| {
+    q.for_each_mut(|(_e, lla, mut w)| {
         w.0 = Vec2::from_array([
             proj.scaler[0] * (180.0 + lla.0 .1) as f32,
             proj.scaler[1] * (90.0 + lla.0 .0) as f32,
@@ -161,10 +161,10 @@ fn color_update(color: Res<SatConfigs>, mut q: Query<(&SatID, &mut DrawMode)>) {
     }
 }
 fn update_labels(
-    q: Query<(&LatLonAlt,&Children), Changed<LatLonAlt>>,
+    q: Query<(&LatLonAlt, &Children), Changed<LatLonAlt>>,
     mut cq: Query<(&mut Text, &SatLabel, &ComputedVisibility)>,
 ) {
-    q.for_each(|(lla,children)| {
+    q.for_each(|(lla, children)| {
         for child in children {
             if let Ok((mut text, label, vis)) = cq.get_mut(*child) {
                 if !vis.is_visible() {
@@ -201,7 +201,7 @@ fn shape_satellite(
         let xy = lla.0;
         let trans = Transform::from_xyz(xy.x, xy.y, 1.0);
         let shape = shapes::Circle {
-            radius: 1.0/3.14,
+            radius: 1.0 / 3.14,
             center: Vec2::ZERO,
         };
         commands

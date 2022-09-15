@@ -2,17 +2,14 @@
 
 use bevy::{
     asset::AssetPlugin,
-    core_pipeline::core_2d::graph::input,
     input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
     prelude::*,
-    render::camera::ScalingMode,
     window::WindowResized,
 };
 use bevy_assets_bundler::{AssetBundlingOptions, BundledAssetIoPlugin};
 use bevy_egui::{egui, EguiContext, EguiPlugin};
 use bevy_prototype_lyon::{
-    prelude::{DrawMode, FillMode, GeometryBuilder, ShapePlugin},
-    shapes,
+    prelude::{ShapePlugin},
 };
 use bevy_retro_camera::{RetroCameraBundle, RetroCameraPlugin};
 use rfd::AsyncFileDialog;
@@ -37,7 +34,7 @@ struct UIString(HashMap<String, String>);
 use celestrak::*;
 use render_satellite::*;
 
-use serde::__private::de;
+
 use tokio::runtime::Runtime;
 #[derive(Default)]
 struct SatConfigs {
@@ -50,7 +47,7 @@ fn show_data(
     mut satcfg: ResMut<SatConfigs>,
     mut uidata: ResMut<UIData>,
     mut query: ResMut<QueryConfig>,
-    mut c: Res<CursorPosition>,
+    c: Res<CursorPosition>,
     mut cam: Query<(&mut OrthographicProjection, &mut Transform)>,
     rt: Res<Runtime>,
     sats: Query<(Entity, &SatID, &TEMEPos, &TEMEVelocity, &LatLonAlt, &Name)>,
@@ -307,7 +304,7 @@ fn resize_map(
 ) {
     for i in events.iter() {
         svg.for_each_mut(|(s, mut trans)| {
-            let siz = svgs.get(s).unwrap().size;
+            let _siz = svgs.get(s).unwrap().size;
 
             trans.scale.x = i.width / 1024.0;
             trans.scale.y = i.height / 1024.0;
@@ -418,10 +415,10 @@ fn scroll_handler(mut scroll_evr: EventReader<MouseWheel>, acc: &mut i32) {
     }
 }
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>, wnd: Res<Windows>) {
-    let mut svg = asset_server.load("webworld2.svg");
+    let svg = asset_server.load("webworld2.svg");
 
     let s = asset_server.load_folder("fonts").unwrap();
-    for i in     {
+    for i in s {
         let h = i.typed::<Font>();
         commands.spawn().insert(h);
     }
@@ -435,14 +432,12 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, wnd: Res<Window
     camera.transform.translation.y = 512.0;
     commands.spawn_bundle(camera);
 
-    let a = wnd.primary();
+    let _a = wnd.primary();
 
-
-    commands
-        .spawn_bundle(Svg2dBundle {
-            svg,
-            origin: Origin::TopLeft,
-            transform: Transform::from_xyz(0.0, 1024.0, 0.0),
-            ..Default::default()
-        });
+    commands.spawn_bundle(Svg2dBundle {
+        svg,
+        origin: Origin::TopLeft,
+        transform: Transform::from_xyz(0.0, 1024.0, 0.0),
+        ..Default::default()
+    });
 }

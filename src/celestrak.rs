@@ -115,17 +115,16 @@ fn update_sat_pos(
         &SGP4Constants,
         &mut TEMEPos,
         &mut TEMEVelocity,
-        &Name
+        &Name,
     )>,
 ) {
-    sats.for_each_mut(|(ts, constants, mut pos, mut vel,n)| {
-
-          if let Ok((p, v)) = propagate_sat(ts.0 as f64, &constants.0) {
-            *pos =p;
-            *vel=v;
-          }else{
-              error!("{} diverged",n.as_str());
-          }
+    sats.for_each_mut(|(ts, constants, mut pos, mut vel, n)| {
+        if let Ok((p, v)) = propagate_sat(ts.0 as f64, &constants.0) {
+            *pos = p;
+            *vel = v;
+        } else {
+            error!("{} diverged", n.as_str());
+        }
     });
 }
 fn update_lonlat(mut cmd: Commands, sats: Query<(Entity, &TEMEPos), Changed<TEMEPos>>) {
@@ -189,9 +188,9 @@ pub fn init_sat_data(mut cmd: Commands, rt: Res<Runtime>) {
                 vel,
                 Name::from(elements.object_name.as_ref().unwrap().clone()),
             ));
-        }else{
-            error!("{} diverged",elements.object_name.as_ref().unwrap());
-             cmd.spawn().insert_bundle((
+        } else {
+            error!("{} diverged", elements.object_name.as_ref().unwrap());
+            cmd.spawn().insert_bundle((
                 id,
                 SGP4Constants(constants),
                 ts,
