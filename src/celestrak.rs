@@ -2,8 +2,7 @@
 //"https://api.n2yo.com/rest/v1/satellite/"
 //tle/52997&apiKey=
 
-use crate::{QueryConfig, TaskWrapper};
-use bevy::prelude::*;
+use bevy::{prelude::*, time::FixedTimestep};
 
 use std::{
     collections::HashMap,
@@ -12,7 +11,7 @@ use std::{
 
 use chrono::Datelike;
 use chrono::{DateTime, TimeZone, Timelike, Utc};
-use derive_more::{From, Into};
+
 use serde::{Deserialize, Serialize};
 use sgp4::{Constants, Elements};
 use tokio::runtime::Runtime;
@@ -27,24 +26,30 @@ pub(crate) async fn get_sat_data() -> Result<Vec<sgp4::Elements>, reqwest::Error
 }
 #[derive(Component, serde::Serialize, serde::Deserialize)]
 pub struct CElements(sgp4::Elements);
-#[derive(Default, Component, From, Into)]
+#[derive(Default, Component)]
 pub struct SatName(pub String);
 
-#[derive(Default, Component, From, Into)]
+#[derive(Default, Component)]
 pub struct SatID(pub u64);
+#[derive(Component)]
+pub struct TaskWrapper<T>(pub Option<tokio::task::JoinHandle<T>>);
 
-#[derive(Default, Component, From, Into)]
+pub struct QueryConfig {
+    pub timer: Timer,
+}
+
+#[derive(Default, Component)]
 pub struct TEMEPos(pub [f64; 3]);
-#[derive(Default, Component, From, Into)]
+#[derive(Default, Component)]
 pub struct TEMEVelocity(pub [f64; 3]);
 
-#[derive(Component, From, Into)]
+#[derive(Component)]
 pub struct SGP4Constants(pub Constants<'static>);
 
-#[derive(Component, From, Into)]
+#[derive(Component)]
 pub struct LatLonAlt(pub (f64, f64, f64));
 
-#[derive(Component, From, Into)]
+#[derive(Component)]
 pub struct TLETimeStamp(pub i64);
 #[derive(Default, Serialize, Deserialize)]
 pub struct SatInfo {
@@ -93,7 +98,7 @@ fn receive_task(
                     sat_info.sats.insert(elements.norad_id, elements);
                 }
                 *sat = sat_info;
-                //info!("Meassge Received! {}", sat.sats.len());
+                info!("Meassge Received! {}", sat.sats.len());
                 //evts.send(QueriedEvent::default());
             }
         }
@@ -110,10 +115,17 @@ fn update_sat_pos(
         &SGP4Constants,
         &mut TEMEPos,
         &mut TEMEVelocity,
+        &Name
     )>,
 ) {
-    sats.for_each_mut(|(ts, constants, mut pos, mut vel)| {
-        (*pos, *vel) = propagate_sat(ts.0 as f64, &constants.0);
+    sats.for_each_mut(|(ts, constants, mut pos, mut vel,n)| {
+
+          if let Ok((p, v)) = propagate_sat(ts.0 as f64, &constants.0) {
+            *pos =p;
+            *vel=v;
+          }else{
+              error!("{} diverged",n.as_str());
+          }
     });
 }
 fn update_lonlat(mut cmd: Commands, sats: Query<(Entity, &TEMEPos), Changed<TEMEPos>>) {
@@ -168,32 +180,45 @@ pub fn init_sat_data(mut cmd: Commands, rt: Res<Runtime>) {
 
         let constants = sgp4::Constants::from_elements(elements).unwrap();
         let ts = TLETimeStamp(elements.datetime.timestamp());
-        let (pos, vel) = propagate_sat(ts.0 as f64, &constants);
-        cmd.spawn().insert_bundle((
-            id,
-            SGP4Constants(constants),
-            ts,
-            pos,
-            vel,
-            Name::from(elements.object_name.as_ref().unwrap().clone()),
-        ));
+        if let Ok((pos, vel)) = propagate_sat(ts.0 as f64, &constants) {
+            cmd.spawn().insert_bundle((
+                id,
+                SGP4Constants(constants),
+                ts,
+                pos,
+                vel,
+                Name::from(elements.object_name.as_ref().unwrap().clone()),
+            ));
+        }else{
+            error!("{} diverged",elements.object_name.as_ref().unwrap());
+             cmd.spawn().insert_bundle((
+                id,
+                SGP4Constants(constants),
+                ts,
+                Name::from(elements.object_name.as_ref().unwrap().clone()),
+            ));
+        }
     }
     cmd.insert_resource(sat_info);
 }
 
-fn propagate_sat(tlets: f64, constants: &Constants) -> (TEMEPos, TEMEVelocity) {
+fn propagate_sat(tlets: f64, constants: &Constants) -> Result<(TEMEPos, TEMEVelocity), ()> {
     let ts = std::time::SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs_f64();
     let ts = ts - tlets;
-    let prediction = constants.propagate(ts / 60.0).unwrap();
-    let (pos, vel) = (
-        TEMEPos(prediction.position),
-        TEMEVelocity(prediction.velocity),
-    );
 
-    (pos, vel)
+    if let Ok(prediction) = constants.propagate(ts / 60.0) {
+        let (pos, vel) = (
+            TEMEPos(prediction.position),
+            TEMEVelocity(prediction.velocity),
+        );
+
+        Ok((pos, vel))
+    } else {
+        Err(())
+    }
 }
 
 #[derive(Default)]
@@ -211,7 +236,15 @@ impl Plugin for SGP4Plugin {
         app.add_system_to_stage(CoreStage::PreUpdate, update_data);
         app.add_system_to_stage(CoreStage::Update, receive_task);
         app.add_system_to_stage(CoreStage::Update, update_every_sat.after(receive_task));
-        app.add_system_to_stage(CoreStage::Update, update_sat_pos.after(update_every_sat));
-        app.add_system_to_stage(CoreStage::Update, update_lonlat);
+        app.add_system_to_stage(
+            CoreStage::Update,
+            update_sat_pos
+                .after(update_every_sat)
+                .with_run_criteria(FixedTimestep::step(1.0 / 60.0)),
+        );
+        app.add_system_to_stage(
+            CoreStage::Update,
+            update_lonlat.with_run_criteria(FixedTimestep::step(1.0 / 60.0)),
+        );
     }
 }

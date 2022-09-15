@@ -30,7 +30,7 @@ use std::time::{Duration, UNIX_EPOCH};
 
 use chrono::Datelike;
 use chrono::{DateTime, TimeZone, Timelike, Utc};
-use derive_more::{From, Into};
+
 use serde::{Deserialize, Serialize};
 use sgp4::{Constants, Elements};
 use tokio::runtime::Runtime;
@@ -45,27 +45,27 @@ pub(crate) async fn get_sat_data() -> Result<Vec<sgp4::Elements>, reqwest::Error
 }
 #[derive(Component, serde::Serialize, serde::Deserialize)]
 pub struct CElements(sgp4::Elements);
-#[derive(Default, Component, From, Into)]
+#[derive(Default, Component)]
 pub struct SatName(pub String);
 
-#[derive(Default, Component, From, Into)]
+#[derive(Default, Component)]
 pub struct Name(pub String);
 
-#[derive(Default, Component, From, Into)]
+#[derive(Default, Component)]
 pub struct SatID(pub u64);
 
-#[derive(Default, Component, From, Into)]
+#[derive(Default, Component)]
 pub struct TEMEPos(pub [f64; 3]);
-#[derive(Default, Component, From, Into)]
+#[derive(Default, Component)]
 pub struct TEMEVelocity(pub [f64; 3]);
 
-#[derive(Component, From, Into)]
+#[derive(Component)]
 pub struct SGP4Constants(pub Constants<'static>);
 
-#[derive(Component, From, Into)]
+#[derive(Component)]
 pub struct LatLonAlt(pub (f64, f64, f64));
 
-#[derive(Component, From, Into)]
+#[derive(Component)]
 pub struct TLETimeStamp(pub i64);
 #[derive(Default, Serialize, Deserialize)]
 pub struct SatInfo {
