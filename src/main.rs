@@ -1,16 +1,13 @@
 //"https://satellitemap.space/json"
 
 use bevy::{
-    asset::AssetPlugin,
     input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
     prelude::*,
     window::WindowResized,
 };
-use bevy_assets_bundler::{AssetBundlingOptions, BundledAssetIoPlugin};
 use bevy_egui::{egui, EguiContext, EguiPlugin};
-use bevy_prototype_lyon::{
-    prelude::{ShapePlugin},
-};
+use bevy_embedded_assets::EmbeddedAssetPlugin;
+use bevy_prototype_lyon::prelude::ShapePlugin;
 use bevy_retro_camera::{RetroCameraBundle, RetroCameraPlugin};
 use rfd::AsyncFileDialog;
 use std::{collections::HashMap, env};
@@ -33,7 +30,6 @@ struct UIData(serde_json::Value);
 struct UIString(HashMap<String, String>);
 use celestrak::*;
 use render_satellite::*;
-
 
 use tokio::runtime::Runtime;
 #[derive(Default)]
@@ -259,8 +255,6 @@ fn create_table<'a, T: ExactSizeIterator + Iterator<Item = &'a [String; 6]>>(
 }
 fn main() {
     let mut app = App::new();
-    let mut options = AssetBundlingOptions::default();
-    options.encode_file_names = true;
 
     app.insert_resource(WindowDescriptor {
         title: "Satellite".to_string(),
@@ -274,7 +268,7 @@ fn main() {
     });
     // ;
     app.add_plugins_with(DefaultPlugins, |group| {
-        group.add_before::<AssetPlugin, _>(BundledAssetIoPlugin::from(options.clone()))
+        group.add_before::<bevy::asset::AssetPlugin, _>(EmbeddedAssetPlugin)
     })
     .add_plugin(bevy_svg::prelude::SvgPlugin)
     .add_plugin(EguiPlugin)

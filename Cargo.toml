@@ -41,7 +41,7 @@ tui-realm-textarea = {path="./tui-realm-textarea"}
 bevy_svg = { git = "https://github.com/Weasy666/bevy_svg", branch = "main", default-features = false, features = ["2d"] }
 bevy_retro_camera = { path="./vendored/bevy_retro_camera" }
 bevy_prototype_lyon= "*"
-bevy_assets_bundler = ">=0.4"
+bevy_embedded_assets = ">=0.4.0"
 
 [build-dependencies]
 bevy_assets_bundler = ">=0.4"
