@@ -14,7 +14,7 @@ use chrono::{DateTime, TimeZone, Timelike, Utc};
 
 use serde::{Deserialize, Serialize};
 use sgp4::{Constants, Elements};
-use tokio::runtime::Runtime;
+
 //https://celestrak.org/NORAD/elements/gp.php?GROUP=STARLINK&FORMAT=TLE
 pub(crate) async fn get_sat_data() -> Result<Vec<sgp4::Elements>, reqwest::Error> {
     let resp =
@@ -33,7 +33,7 @@ pub struct SatName(pub String);
 pub struct SatID(pub u64);
 #[derive(Component)]
 pub struct TaskWrapper<T>(pub Option<tokio::task::JoinHandle<T>>);
-
+#[derive(Resource)]
 pub struct QueryConfig {
     pub timer: Timer,
 }
@@ -44,7 +44,7 @@ pub struct TEMEPos(pub [f64; 3]);
 pub struct TEMEVelocity(pub [f64; 3]);
 
 #[derive(Component)]
-pub struct SGP4Constants(pub Constants<'static>);
+pub struct SGP4Constants(pub Constants);
 
 #[derive(Component)]
 pub struct LatLonAlt(pub (f64, f64, f64));
@@ -52,6 +52,8 @@ pub struct LatLonAlt(pub (f64, f64, f64));
 #[derive(Component)]
 pub struct TLETimeStamp(pub i64);
 #[derive(Default, Serialize, Deserialize)]
+
+#[derive(Resource)]
 pub struct SatInfo {
     pub sats: HashMap<u64, sgp4::Elements>,
 }
@@ -64,7 +66,8 @@ pub fn get_name(data: &Res<SatInfo>, id: &&SatID) -> String {
         .unwrap()
         .to_owned()
 }
-
+#[derive(Resource)]
+pub struct Runtime(pub tokio::runtime::Runtime);
 fn update_data(
     mut cmd: Commands,
     rt: Res<Runtime>,
@@ -74,8 +77,8 @@ fn update_data(
     config.timer.tick(time.delta());
 
     if config.timer.finished() {
-        let task = rt.spawn(async { get_sat_data().await.unwrap() });
-        cmd.spawn().insert(TaskWrapper(Some(task)));
+        let task = rt.0.spawn(async { get_sat_data().await.unwrap() });
+        cmd.spawn(TaskWrapper(Some(task)));
         // info!(
         //     "Query the satellite info at {}",
         //     time.seconds_since_startup()
@@ -92,7 +95,7 @@ fn receive_task(
         if t.0.is_some() {
             if t.0.as_ref().unwrap().is_finished() {
                 let s = t.0.take().unwrap();
-                let res = rt.block_on(s).unwrap();
+                let res = rt.0.block_on(s).unwrap();
                 let mut sat_info = SatInfo::default();
                 for elements in res {
                     sat_info.sats.insert(elements.norad_id, elements);
@@ -166,7 +169,7 @@ fn update_every_sat(mut cmd: Commands, satdata: Res<SatInfo>, sats: Query<(Entit
 }
 
 pub fn init_sat_data(mut cmd: Commands, rt: Res<Runtime>) {
-    let s = rt.block_on(get_sat_data()).unwrap();
+    let s = rt.0.block_on(get_sat_data()).unwrap();
     let mut sat_info = SatInfo::default();
     for elements in s {
         if elements.object_name.as_ref().unwrap().contains(&"STARLINK") {
@@ -180,7 +183,7 @@ pub fn init_sat_data(mut cmd: Commands, rt: Res<Runtime>) {
         let constants = sgp4::Constants::from_elements(elements).unwrap();
         let ts = TLETimeStamp(elements.datetime.timestamp());
         if let Ok((pos, vel)) = propagate_sat(ts.0 as f64, &constants) {
-            cmd.spawn().insert_bundle((
+            cmd.spawn((
                 id,
                 SGP4Constants(constants),
                 ts,
@@ -190,7 +193,7 @@ pub fn init_sat_data(mut cmd: Commands, rt: Res<Runtime>) {
             ));
         } else {
             error!("{} diverged", elements.object_name.as_ref().unwrap());
-            cmd.spawn().insert_bundle((
+            cmd.spawn((
                 id,
                 SGP4Constants(constants),
                 ts,
@@ -225,9 +228,9 @@ pub struct SGP4Plugin;
 
 impl Plugin for SGP4Plugin {
     fn build(&self, app: &mut App) {
-        let rt = Runtime::new().unwrap();
+        let rt = Runtime(tokio::runtime::Runtime::new().unwrap());
         app.insert_resource(QueryConfig {
-            timer: Timer::new(Duration::from_secs(60 * 24 * 24), true),
+            timer: Timer::new(Duration::from_secs(60 * 24 * 24), TimerMode::Repeating),
         });
         app.insert_resource(rt);
         app.insert_resource(SatInfo::default());

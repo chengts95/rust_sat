@@ -38,18 +38,17 @@ tuirealm =  {git="https://github.com/veeso/tui-realm"}
 tui-textarea = {git="https://github.com/rhysd/tui-textarea"}
 tui-realm-stdlib ={git="https://github.com/veeso/tui-realm-stdlib"} 
 tui-realm-textarea = {path="./tui-realm-textarea"}
-bevy_svg = { git = "https://github.com/Weasy666/bevy_svg", branch = "main", default-features = false, features = ["2d"] }
+bevy_svg = { path= "./vendored/bevy_svg", default-features = false, features = ["2d"] }
 bevy_retro_camera = { path="./vendored/bevy_retro_camera" }
 bevy_prototype_lyon= "*"
-bevy_embedded_assets = ">=0.4.0"
+bevy_embedded_assets = ">=0.6.0"
 
-[build-dependencies]
-bevy_assets_bundler = ">=0.4"
+
 [patch.crates-io]
 tuirealm =  {git="https://github.com/veeso/tui-realm"}
 
 [dependencies.bevy]
-version = ">=0.8"
+version = ">=0.9"
 # Disable the default features if there are any that you do not want
 default-features = false
 features = [

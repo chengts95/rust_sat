@@ -8,6 +8,8 @@ use crate::{celestrak::SatID, SatConfigs};
 use super::celestrak::LatLonAlt;
 #[derive(Default, Component)]
 struct WorldCoord(Vec2);
+
+#[derive(Resource)]
 pub struct GoogleProjector {
     pub zoom: i32,
     pub scaler: Vec2,
@@ -206,14 +208,14 @@ fn shape_satellite(
         };
         commands
             .entity(e)
-            .insert_bundle(GeometryBuilder::build_as(
+            .insert(GeometryBuilder::build_as(
                 &shape,
                 DrawMode::Fill {
                     0: FillMode::color(color.sat_color),
                 },
                 trans,
             ))
-            .insert_bundle(VisibilityBundle::default());
+            .insert(VisibilityBundle::default());
 
         commands.entity(e).with_children(|parent| {
             parent
@@ -277,7 +279,7 @@ impl Plugin for SatRenderPlugin {
             radius: 2.0,
             center: Vec2::ZERO,
         };
-        app.world.spawn().insert_bundle(GeometryBuilder::build_as(
+        app.world.spawn(GeometryBuilder::build_as(
             &shape,
             DrawMode::Fill {
                 0: FillMode::color(Color::YELLOW),

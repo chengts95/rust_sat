@@ -16,23 +16,23 @@ use bevy_svg::prelude::*;
 mod celestrak;
 mod render_satellite;
 mod socket;
-
+#[derive(Resource)]
 struct RefreshConfig {
     timer: Timer,
 }
+#[derive(Resource)]
 struct CursorPosition(Vec2);
 #[derive(Default)]
 struct QueriedEvent;
 
-#[derive(Default, Component)]
+#[derive(Default, Resource)]
 struct UIData(serde_json::Value);
 #[derive(Default, Component)]
 struct UIString(HashMap<String, String>);
 use celestrak::*;
 use render_satellite::*;
 
-use tokio::runtime::Runtime;
-#[derive(Default)]
+#[derive(Default, Resource)]
 struct SatConfigs {
     sat_color: Color,
     table_data: Vec<[String; 6]>,
@@ -45,7 +45,7 @@ fn show_data(
     mut query: ResMut<QueryConfig>,
     c: Res<CursorPosition>,
     mut cam: Query<(&mut OrthographicProjection, &mut Transform)>,
-    rt: Res<Runtime>,
+    rt: Res<celestrak::Runtime>,
     sats: Query<(Entity, &SatID, &TEMEPos, &TEMEVelocity, &LatLonAlt, &Name)>,
     mut vis: Query<&mut Visibility, With<SatID>>,
 ) {
@@ -125,7 +125,7 @@ fn show_data(
                     let name = name.as_str();
 
                     let a = [
-                        e.id().to_string(),
+                        e.index().to_string(),
                         id.0.to_string(),
                         name.to_string(),
                         format!("{:.2},{:.2},{:.2}", pos.0[0], pos.0[1], pos.0[2]),
@@ -153,7 +153,7 @@ fn show_data(
             #[cfg(not(target_arch = "wasm32"))]
             {
                 if ui.button("export").clicked() {
-                    let f = rt.block_on(async {
+                    let f = rt.0.block_on(async {
                         let file = AsyncFileDialog::new()
                             .add_filter("csv", &["csv"])
                             .set_directory(env::current_dir().unwrap().as_path())
@@ -256,20 +256,26 @@ fn create_table<'a, T: ExactSizeIterator + Iterator<Item = &'a [String; 6]>>(
 fn main() {
     let mut app = App::new();
 
-    app.insert_resource(WindowDescriptor {
-        title: "Satellite".to_string(),
-
-        ..Default::default()
-    });
     app.insert_resource(ClearColor(Color::rgb_u8(0, 7, 13)));
     app.insert_resource(SatConfigs {
         sat_color: Color::rgb_u8(0, 255, 202),
         ..Default::default()
     });
     // ;
-    app.add_plugins_with(DefaultPlugins, |group| {
-        group.add_before::<bevy::asset::AssetPlugin, _>(EmbeddedAssetPlugin)
-    })
+    app.add_plugins(
+        DefaultPlugins
+            .set(WindowPlugin {
+                window: WindowDescriptor {
+                    title: "Satellite".to_string(),
+                    ..Default::default()
+                },
+
+                ..Default::default()
+            })
+            .set(ImagePlugin::default_nearest())
+            .build()
+            .add_before::<bevy::asset::AssetPlugin, _>(EmbeddedAssetPlugin),
+    )
     .add_plugin(bevy_svg::prelude::SvgPlugin)
     .add_plugin(EguiPlugin)
     .add_plugin(RetroCameraPlugin)
@@ -279,7 +285,11 @@ fn main() {
 
     app.add_plugin(SGP4Plugin);
     app.insert_resource(UIData::default());
-    app.add_system_to_stage(CoreStage::PreUpdate, retro_cam_input_handle);
+    app.add_stage_before(
+        CoreStage::PreUpdate,
+        "inputs",
+        SystemStage::single_threaded().with_system(retro_cam_input_handle),
+    );
 
     //app.add_system_to_stage(CoreStage::PreUpdate, resize_map);
     app.add_system_to_stage(CoreStage::PreUpdate, get_cursor_coord);
@@ -370,6 +380,10 @@ fn retro_cam_input_handle(
             // if trans.translation.y < 0.0 {
             //     trans.translation.y = 0.0
             // }
+        } 
+  
+        for ev in ev_motion.iter() {
+       
         }
     });
 }
@@ -414,7 +428,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, wnd: Res<Window
     let s = asset_server.load_folder("fonts").unwrap();
     for i in s {
         let h = i.typed::<Font>();
-        commands.spawn().insert(h);
+        commands.spawn(h);
     }
 
     commands.insert_resource(CursorPosition(Vec2 { x: 0.0, y: 0.0 }));
