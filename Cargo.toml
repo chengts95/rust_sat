@@ -42,7 +42,7 @@ bevy_svg = { path= "./vendored/bevy_svg", default-features = false, features = [
 bevy_retro_camera = { path="./vendored/bevy_retro_camera" }
 bevy_prototype_lyon= "*"
 bevy_embedded_assets = ">=0.6.0"
-
+usagi = "0.2.0"
 
 [patch.crates-io]
 tuirealm =  {git="https://github.com/veeso/tui-realm"}
