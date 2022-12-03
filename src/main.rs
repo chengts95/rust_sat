@@ -3,8 +3,9 @@
 use bevy::{
     input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
     prelude::*,
-    render::{camera::CameraProjection, primitives::Frustum},
-    window::WindowResized, sprite::SpritePlugin,
+    render::{camera::CameraProjection, primitives::Frustum, view::NoFrustumCulling},
+    sprite::{Mesh2dHandle, SpritePlugin},
+    window::WindowResized,
 };
 use bevy_egui::{egui, EguiContext, EguiPlugin};
 use bevy_embedded_assets::EmbeddedAssetPlugin;
@@ -328,6 +329,7 @@ fn main() {
     app.add_plugin(GSPlugin);
     //app.add_system_to_stage(CoreStage::PreUpdate, resize_map);
     app.add_system_to_stage(CoreStage::PreUpdate, get_cursor_coord);
+    app.add_system(check_vis);
     app.add_stage_before(
         CoreStage::PostUpdate,
         "egui",
@@ -374,6 +376,7 @@ fn cam_input_handle(
         zoom += 0.1 * acc as f32;
         x.scale = zoom.exp();
         x.scale = x.scale.clamp(0.0, 1.2);
+
         if input_mouse.pressed(MouseButton::Middle) {
             for ev in ev_motion.iter() {
                 trans.translation = trans.translation - Vec3::new(ev.delta.x, -ev.delta.y, 0.0);
@@ -418,6 +421,28 @@ fn retro_cam_input_handle(
         }
 
         for ev in ev_motion.iter() {}
+    });
+}
+
+fn check_vis(
+    q: Query<
+        (&OrthographicProjection, &GlobalTransform),
+        (With<Camera2d>, Changed<OrthographicProjection>),
+    >,
+    mut q2: Query<
+        (&mut Visibility, &GlobalTransform),
+        (With<Mesh2dHandle>, Without<NoFrustumCulling>),
+    >,
+) {
+    q.for_each(|(x, t2)| {
+        let dis = x.scale / 2.0;
+        let center = Vec2::new(t2.translation().x, t2.translation().y);
+        let lb = Vec2::new(center.x - dis, center.y - dis);
+        let rb = Vec2::new(center.x + dis, center.y + dis);
+        q2.for_each_mut(|(mut vis, transform)| {
+            let s = transform.translation();
+            vis.is_visible = s.x > lb.x && s.y > lb.y && s.x < rb.x && s.y < rb.y
+        });
     });
 }
 
@@ -473,9 +498,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, wnd: Res<Window
         .insert(Name::new("Toronto\n多伦多"))
         .id();
     let edge = (e1, e2);
-    commands
-        .spawn(GSDataLink(edge))
-        .insert(Name::new("卡多线"));
+    commands.spawn(GSDataLink(edge)).insert(Name::new("卡多线"));
 
     let s = asset_server.load_folder("fonts").unwrap();
     for i in s {
@@ -488,19 +511,9 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, wnd: Res<Window
 
     let mut camera = RetroCameraBundle::fixed_height(1024.0, 0.5);
 
-    // camera.orthographic_projection.scaling_mode = ScalingMode::WindowSize;
-    let transform = Transform::from_xyz(0.0, 0.0, camera.orthographic_projection.far - 0.1);
-    let view_projection = camera.orthographic_projection.get_projection_matrix()
-        * transform.compute_matrix().inverse();
-    let f = Frustum::from_view_projection(
-        &view_projection,
-        &transform.translation,
-        &transform.back(),
-        camera.orthographic_projection.far,
-    );
     camera.transform.translation.x = 512.0;
     camera.transform.translation.y = 512.0;
-    camera.frustum = f;
+
     commands.spawn(camera);
 
     let _a = wnd.primary();
@@ -510,5 +523,5 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, wnd: Res<Window
         origin: Origin::TopLeft,
         transform: Transform::from_xyz(-2.0, 1019.0, 0.0),
         ..Default::default()
-    });
+    }).insert(NoFrustumCulling);
 }

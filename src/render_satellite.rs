@@ -176,12 +176,12 @@ fn update_labels(
     q: Query<(&LatLonAlt, &Children), Changed<LatLonAlt>>,
     mut cq: Query<(&mut Text, &SatLabel, &ComputedVisibility)>,
 ) {
-    let mut ss = 0;
+   // let mut ss = 0;
     q.for_each(|(lla, children)| {
         for child in children {
             if let Ok((mut text, label, vis)) = cq.get_mut(*child) {
                 if !vis.is_visible_in_view() {
-                    ss += 1;
+                   // ss += 1;
                     continue;
                 }
                 match *label {
@@ -195,7 +195,7 @@ fn update_labels(
             }
         }
     });
-    info!("{}\n", ss);
+    
 }
 fn shape_satellite(
     mut commands: Commands,
