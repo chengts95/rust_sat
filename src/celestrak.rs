@@ -52,7 +52,6 @@ pub struct LatLonAlt(pub (f64, f64, f64));
 #[derive(Component)]
 pub struct TLETimeStamp(pub i64);
 #[derive(Default, Serialize, Deserialize)]
-
 #[derive(Resource)]
 pub struct SatInfo {
     pub sats: HashMap<u64, sgp4::Elements>,

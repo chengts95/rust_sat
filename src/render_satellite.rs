@@ -109,7 +109,7 @@ fn google_world_coord(
     let _f1 = (l * 256) as f32;
     q.for_each_mut(|(_e, lla, mut w)| {
         //let (xt, yt) = usagi::web_mercator::angle_to_tile(lla.0 .1, lla.0 .0, proj.zoom as u8);
-       
+
         let coord = add_world_coord(lla, &proj);
         // let coord = usagi::web_mercator::angle_to_pixel(lla.0 .1, lla.0 .0, proj.zoom as u8);
         // let coord = Vec2::new((coord.0 as f32), _f1 - (coord.1 as f32));
@@ -117,7 +117,6 @@ fn google_world_coord(
     });
 
     q2.for_each(|(e, lla)| {
-      
         let xy = add_world_coord(lla, &proj);
         // let xy = usagi::web_mercator::angle_to_pixel(lla.0 .1, lla.0 .0, proj.zoom as u8);
         // let xy = Vec2::new(xy.0 as f32, _f1 - xy.1 as f32);
@@ -176,12 +175,12 @@ fn update_labels(
     q: Query<(&LatLonAlt, &Children), Changed<LatLonAlt>>,
     mut cq: Query<(&mut Text, &SatLabel, &ComputedVisibility)>,
 ) {
-   // let mut ss = 0;
+    // let mut ss = 0;
     q.for_each(|(lla, children)| {
         for child in children {
             if let Ok((mut text, label, vis)) = cq.get_mut(*child) {
                 if !vis.is_visible_in_view() {
-                   // ss += 1;
+                    // ss += 1;
                     continue;
                 }
                 match *label {
@@ -195,7 +194,6 @@ fn update_labels(
             }
         }
     });
-    
 }
 fn shape_satellite(
     mut commands: Commands,
@@ -219,17 +217,14 @@ fn shape_satellite(
             radius: 1.0 / 3.14,
             center: Vec2::ZERO,
         };
-  
-        commands
-            .entity(e)
-            .insert(GeometryBuilder::build_as(
-                &shape,
-                DrawMode::Fill {
-                    0: FillMode::color(color.sat_color),
-                },
-                trans,
-            ))
-            ;
+
+        commands.entity(e).insert(GeometryBuilder::build_as(
+            &shape,
+            DrawMode::Fill {
+                0: FillMode::color(color.sat_color),
+            },
+            trans,
+        ));
 
         commands.entity(e).with_children(|parent| {
             parent

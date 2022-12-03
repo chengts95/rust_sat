@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use zmq::Socket;
 
-#[derive(Default,Resource)]
+#[derive(Default, Resource)]
 pub struct ZMQContext {
     ctx: zmq::Context,
     req: Option<Socket>,

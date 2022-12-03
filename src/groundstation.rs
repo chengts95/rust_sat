@@ -1,15 +1,14 @@
 use crate::render_satellite::{SatRenderStage, WorldCoord};
-use crate::util::{distance::distance, *};
-use crate::SatConfigs;
+use crate::util::*;
 
 use crate::celestrak::{LatLonAlt, SatID};
-use bevy::{prelude::*, time::FixedTimestep};
+use bevy::prelude::*;
 use bevy_prototype_lyon::prelude::*;
 #[derive(Component, Default)]
 pub struct GroundStationID(pub u64);
 
 #[derive(Component)]
-pub struct GSDataLink(pub (Entity,Entity));
+pub struct GSDataLink(pub (Entity, Entity));
 #[derive(Default, Resource)]
 pub struct GSConfigs {
     pub color: Color,
@@ -42,11 +41,11 @@ pub fn distance_update(
     mut q: Query<(&GroundStationID, &LatLonAlt, &mut NearestSat)>,
     sats: Query<(Entity, &SatID, &LatLonAlt)>,
 ) {
-    q.for_each_mut(|(id, gs_llt, mut neareast)| {
+    q.for_each_mut(|(_id, gs_llt, mut neareast)| {
         let res = sats
             .iter()
             .map(|(e, _, llt)| {
-                let dis = distance::ground_space_distance((gs_llt.0 .0, gs_llt.0 .1), llt.0);
+                let dis = distance::ground_space_distance((gs_llt.0 .0, gs_llt.0 .1), (llt.0.0,llt.0.1,1000.0*llt.0.2));
                 NearestSat {
                     eid: e,
                     distance: dis,
@@ -60,7 +59,7 @@ pub fn distance_update(
     });
 }
 pub fn print_gs(q: Query<(&GroundStationID, &LatLonAlt, &NearestSat, &WorldCoord)>) {
-    q.for_each(|(id, llt, sat, w)| {
+    q.for_each(|(_id, _llt, sat, _w)| {
         info!("{}", sat.distance);
     });
 }
@@ -68,7 +67,7 @@ pub fn print_gs(q: Query<(&GroundStationID, &LatLonAlt, &NearestSat, &WorldCoord
 fn shape_ground_station(
     mut commands: Commands,
     color: Res<GSConfigs>,
-    q: Query<(Entity, &WorldCoord,&Name), (With<GroundStationID>, Added<WorldCoord>)>,
+    q: Query<(Entity, &WorldCoord, &Name), (With<GroundStationID>, Added<WorldCoord>)>,
     fonts: Query<&Handle<Font>>,
 ) {
     if q.is_empty() {
@@ -81,7 +80,7 @@ fn shape_ground_station(
         font_size: 30.0,
         color: Color::WHITE,
     };
-    q.for_each(|(e, lla,n)| {
+    q.for_each(|(e, lla, n)| {
         info!("{}", lla.0);
         let xy = lla.0;
         let trans = Transform::from_xyz(xy.x, xy.y, 1.0);
@@ -89,34 +88,27 @@ fn shape_ground_station(
             radius: 1.0 / 3.14,
             center: Vec2::ZERO,
         };
-        commands
-            .entity(e)
-            .insert(GeometryBuilder::build_as(
-                &shape,
-                DrawMode::Fill {
-                    0: FillMode::color(color.color),
-                },
-                trans,
-            ))
-            ;
+        commands.entity(e).insert(GeometryBuilder::build_as(
+            &shape,
+            DrawMode::Fill {
+                0: FillMode::color(color.color),
+            },
+            trans,
+        ));
 
-        
         commands.entity(e).with_children(|parent| {
-            parent
-                .spawn(Text2dBundle {
-                    text: Text::from_section(n.as_str(), text_style.clone())
-                        .with_alignment(TextAlignment::CENTER),
-                    transform: Transform::from_xyz(0.0, -2.0, 1.1)
-                        .with_scale([0.04, 0.04, 0.0].into()),
-                    ..default()
-                });
-            });    
-
+            parent.spawn(Text2dBundle {
+                text: Text::from_section(n.as_str(), text_style.clone())
+                    .with_alignment(TextAlignment::CENTER),
+                transform: Transform::from_xyz(0.0, -2.0, 1.1).with_scale([0.04, 0.04, 0.0].into()),
+                ..default()
+            });
+        });
     });
 }
 fn print_cam(cam: Query<(&OrthographicProjection, &GlobalTransform)>) {
-    cam.for_each(|(a, camera_transform)| {
-        let s = a.left;
+    cam.for_each(|(a, _camera_transform)| {
+        let _s = a.left;
     });
 }
 pub struct GSPlugin;

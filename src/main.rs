@@ -3,8 +3,8 @@
 use bevy::{
     input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
     prelude::*,
-    render::{camera::CameraProjection, primitives::Frustum, view::NoFrustumCulling},
-    sprite::{Mesh2dHandle, SpritePlugin},
+    render::view::NoFrustumCulling,
+    sprite::Mesh2dHandle,
     window::WindowResized,
 };
 use bevy_egui::{egui, EguiContext, EguiPlugin};
@@ -12,7 +12,7 @@ use bevy_embedded_assets::EmbeddedAssetPlugin;
 use bevy_prototype_lyon::prelude::ShapePlugin;
 use bevy_retro_camera::{RetroCameraBundle, RetroCameraPlugin};
 use groundstation::{GSConfigs, GSDataLink, GSPlugin, GroundStationBundle, GroundStationID};
-use reqwest::header::COOKIE;
+
 use rfd::AsyncFileDialog;
 use std::{collections::HashMap, env};
 
@@ -420,7 +420,7 @@ fn retro_cam_input_handle(
             // }
         }
 
-        for ev in ev_motion.iter() {}
+        for _ev in ev_motion.iter() {}
     });
 }
 
@@ -518,10 +518,12 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, wnd: Res<Window
 
     let _a = wnd.primary();
 
-    commands.spawn(Svg2dBundle {
-        svg,
-        origin: Origin::TopLeft,
-        transform: Transform::from_xyz(-2.0, 1019.0, 0.0),
-        ..Default::default()
-    }).insert(NoFrustumCulling);
+    commands
+        .spawn(Svg2dBundle {
+            svg,
+            origin: Origin::TopLeft,
+            transform: Transform::from_xyz(-2.0, 1019.0, 0.0),
+            ..Default::default()
+        })
+        .insert(NoFrustumCulling);
 }

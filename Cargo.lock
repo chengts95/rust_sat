@@ -71,7 +71,7 @@ dependencies = [
  "alsa-sys",
  "bitflags",
  "libc",
- "nix 0.23.1",
+ "nix 0.23.2",
 ]
 
 [[package]]
@@ -824,7 +824,7 @@ dependencies = [
 
 [[package]]
 name = "bevy_svg"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "bevy",
@@ -2620,29 +2620,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lazy-regex"
-version = "2.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae9656bf98b413727b974a451039bc00ce546c3de9440cb4a7b65222b71e17cc"
-dependencies = [
- "lazy-regex-proc_macros",
- "once_cell",
- "regex",
-]
-
-[[package]]
-name = "lazy-regex-proc_macros"
-version = "2.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da3c3042a5f73640f091fda4175798f2b51c2107deeab18e3017873a4772dd36"
-dependencies = [
- "proc-macro2",
- "quote",
- "regex",
- "syn",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3053,9 +3030,9 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.23.1"
+version = "0.23.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f866317acbd3a240710c63f065ffb1e4fd466259045ccb504130b7f668f35c6"
+checksum = "8f3790c00a0150112de0f4cd161e3d7fc4b2d8a5542ffc35f099a2562aecb35c"
 dependencies = [
  "bitflags",
  "cc",
@@ -3798,10 +3775,6 @@ dependencies = [
  "sgp4",
  "tokio",
  "tui",
- "tui-realm-stdlib",
- "tui-realm-textarea",
- "tui-textarea",
- "tuirealm",
  "usagi",
  "zmq",
 ]
@@ -4122,12 +4095,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "smawk"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f67ad224767faa3c7d8b6d91985b78e70a1324408abcb1cfcc2be4c06bc06043"
-
-[[package]]
 name = "socket2"
 version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4306,17 +4273,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bab24d30b911b2376f3a13cc2cd443142f0c81dda04c118693e35b3835757755"
 dependencies = [
  "winapi-util",
-]
-
-[[package]]
-name = "textwrap"
-version = "0.15.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7b3e525a49ec206798b40326a44121291b530c963cfb01018f63e135bac543d"
-dependencies = [
- "smawk",
- "unicode-linebreak",
- "unicode-width",
 ]
 
 [[package]]
@@ -4580,58 +4536,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tui-realm-stdlib"
-version = "1.2.0"
-source = "git+https://github.com/veeso/tui-realm-stdlib#4697ed28c97430622349cb8043f5536ffcf49d6c"
-dependencies = [
- "textwrap",
- "tuirealm",
- "unicode-width",
-]
-
-[[package]]
-name = "tui-realm-textarea"
-version = "1.1.0"
-dependencies = [
- "lazy-regex",
- "tui-textarea",
- "tuirealm",
-]
-
-[[package]]
-name = "tui-textarea"
-version = "0.2.0"
-source = "git+https://github.com/rhysd/tui-textarea#c5138aabf23770876bd827d7daa78c525738978c"
-dependencies = [
- "crossterm",
- "tui",
-]
-
-[[package]]
-name = "tuirealm"
-version = "1.8.0"
-source = "git+https://github.com/veeso/tui-realm#e6bd97b870beb2ca0e89abacd85fd897c9a54ab1"
-dependencies = [
- "bitflags",
- "crossterm",
- "lazy-regex",
- "thiserror",
- "tui",
- "tuirealm_derive",
-]
-
-[[package]]
-name = "tuirealm_derive"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0adcdaf59881626555558eae08f8a53003c8a1961723b4d7a10c51599abbc81"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "twox-hash"
 version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4682,16 +4586,6 @@ name = "unicode-ident"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ceab39d59e4c9499d4e5a8ee0e2735b891bb7308ac83dfb4e80cad195c9f6f3"
-
-[[package]]
-name = "unicode-linebreak"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5faade31a542b8b35855fff6e8def199853b2da8da256da52f52f1316ee3137"
-dependencies = [
- "hashbrown",
- "regex",
-]
 
 [[package]]
 name = "unicode-normalization"
@@ -5388,3 +5282,8 @@ dependencies = [
  "metadeps",
  "zeromq-src",
 ]
+
+[[patch.unused]]
+name = "tuirealm"
+version = "1.8.0"
+source = "git+https://github.com/veeso/tui-realm#e6bd97b870beb2ca0e89abacd85fd897c9a54ab1"
