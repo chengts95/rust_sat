@@ -3,19 +3,24 @@
 use bevy::{
     input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
     prelude::*,
-    window::WindowResized,
+    render::{camera::CameraProjection, primitives::Frustum},
+    window::WindowResized, sprite::SpritePlugin,
 };
 use bevy_egui::{egui, EguiContext, EguiPlugin};
 use bevy_embedded_assets::EmbeddedAssetPlugin;
 use bevy_prototype_lyon::prelude::ShapePlugin;
 use bevy_retro_camera::{RetroCameraBundle, RetroCameraPlugin};
+use groundstation::{GSConfigs, GSDataLink, GSPlugin, GroundStationBundle, GroundStationID};
+use reqwest::header::COOKIE;
 use rfd::AsyncFileDialog;
 use std::{collections::HashMap, env};
 
 use bevy_svg::prelude::*;
-mod celestrak;
-mod render_satellite;
-mod socket;
+pub mod celestrak;
+pub mod groundstation;
+pub mod render_satellite;
+pub mod socket;
+pub mod util;
 #[derive(Resource)]
 struct RefreshConfig {
     timer: Timer,
@@ -41,6 +46,7 @@ struct SatConfigs {
 fn show_data(
     mut egui_context: ResMut<EguiContext>,
     mut satcfg: ResMut<SatConfigs>,
+    mut gscfg: ResMut<GSConfigs>,
     mut uidata: ResMut<UIData>,
     mut query: ResMut<QueryConfig>,
     c: Res<CursorPosition>,
@@ -85,7 +91,7 @@ fn show_data(
         .unwrap_or(&false.into())
         .as_bool()
         .unwrap();
-    config_ui(&mut egui_context, &mut satcfg, &mut opened);
+    config_ui(&mut egui_context, &mut satcfg, &mut gscfg, &mut opened);
     uidata.0["Config"] = opened.into();
     let mut opened = uidata
         .0
@@ -182,6 +188,7 @@ fn show_data(
 fn config_ui(
     egui_context: &mut ResMut<EguiContext>,
     satcfg: &mut ResMut<SatConfigs>,
+    gscfg: &mut ResMut<GSConfigs>,
     opened: &mut bool,
 ) {
     egui::Window::new("Configs")
@@ -209,6 +216,29 @@ fn config_ui(
                     a as f32 / 255.0,
                 ];
                 satcfg.sat_color = Color::from(srgba);
+            }
+            let a = gscfg.color.clone();
+            let mut srgba = unsafe {
+                let ptr = (&mut a.as_rgba_u32() as *mut u32) as *mut u8;
+
+                let srgba = egui::Color32::from_rgba_premultiplied(
+                    *ptr.offset(0),
+                    *ptr.offset(1),
+                    *ptr.offset(2),
+                    *ptr.offset(3),
+                );
+                srgba
+            };
+            ui.label("Ground Station Color:");
+            if ui.color_edit_button_srgba(&mut srgba).changed() {
+                let (r, g, b, a) = srgba.to_tuple();
+                let srgba: [f32; 4] = [
+                    r as f32 / 255.0,
+                    g as f32 / 255.0,
+                    b as f32 / 255.0,
+                    a as f32 / 255.0,
+                ];
+                gscfg.color = Color::from(srgba);
             }
         });
 }
@@ -262,6 +292,7 @@ fn main() {
         ..Default::default()
     });
     // ;
+
     app.add_plugins(
         DefaultPlugins
             .set(WindowPlugin {
@@ -290,7 +321,11 @@ fn main() {
         "inputs",
         SystemStage::single_threaded().with_system(retro_cam_input_handle),
     );
-
+    app.insert_resource(GSConfigs {
+        color: Color::YELLOW,
+        visible: Default::default(),
+    });
+    app.add_plugin(GSPlugin);
     //app.add_system_to_stage(CoreStage::PreUpdate, resize_map);
     app.add_system_to_stage(CoreStage::PreUpdate, get_cursor_coord);
     app.add_stage_before(
@@ -380,11 +415,9 @@ fn retro_cam_input_handle(
             // if trans.translation.y < 0.0 {
             //     trans.translation.y = 0.0
             // }
-        } 
-  
-        for ev in ev_motion.iter() {
-       
         }
+
+        for ev in ev_motion.iter() {}
     });
 }
 
@@ -424,6 +457,25 @@ fn scroll_handler(mut scroll_evr: EventReader<MouseWheel>, acc: &mut i32) {
 }
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>, wnd: Res<Windows>) {
     let svg = asset_server.load("webworld2.svg");
+    let e1 = commands
+        .spawn(GroundStationBundle {
+            id: GroundStationID(0),
+            pos: LatLonAlt((51.00, -114.029, 0.0)),
+        })
+        .insert(Name::new("Calgary\n卡尔加里"))
+        .id();
+
+    let e2 = commands
+        .spawn(GroundStationBundle {
+            id: GroundStationID(1),
+            pos: LatLonAlt((44.21895, -80.11, 0.0)),
+        })
+        .insert(Name::new("Toronto\n多伦多"))
+        .id();
+    let edge = (e1, e2);
+    commands
+        .spawn(GSDataLink(edge))
+        .insert(Name::new("卡多线"));
 
     let s = asset_server.load_folder("fonts").unwrap();
     for i in s {
@@ -435,17 +487,28 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, wnd: Res<Window
     // let mut camera = Camera2dBundle::default();
 
     let mut camera = RetroCameraBundle::fixed_height(1024.0, 0.5);
+
     // camera.orthographic_projection.scaling_mode = ScalingMode::WindowSize;
+    let transform = Transform::from_xyz(0.0, 0.0, camera.orthographic_projection.far - 0.1);
+    let view_projection = camera.orthographic_projection.get_projection_matrix()
+        * transform.compute_matrix().inverse();
+    let f = Frustum::from_view_projection(
+        &view_projection,
+        &transform.translation,
+        &transform.back(),
+        camera.orthographic_projection.far,
+    );
     camera.transform.translation.x = 512.0;
     camera.transform.translation.y = 512.0;
-    commands.spawn_bundle(camera);
+    camera.frustum = f;
+    commands.spawn(camera);
 
     let _a = wnd.primary();
 
-    commands.spawn_bundle(Svg2dBundle {
+    commands.spawn(Svg2dBundle {
         svg,
         origin: Origin::TopLeft,
-        transform: Transform::from_xyz(0.0, 1024.0, 0.0),
+        transform: Transform::from_xyz(-2.0, 1019.0, 0.0),
         ..Default::default()
     });
 }
