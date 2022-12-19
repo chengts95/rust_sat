@@ -11,7 +11,8 @@ use bevy_egui::{egui, EguiContext, EguiPlugin};
 use bevy_embedded_assets::EmbeddedAssetPlugin;
 use bevy_prototype_lyon::prelude::ShapePlugin;
 use bevy_retro_camera::{RetroCameraBundle, RetroCameraPlugin};
-use groundstation::{GSConfigs, GSDataLink, GSPlugin, GroundStationBundle, GroundStationID};
+use datalink::{DatalinkPlugin, GSDataLink};
+use groundstation::{GSConfigs,GSPlugin, GroundStationBundle, GroundStationID};
 
 use rfd::AsyncFileDialog;
 use std::{collections::HashMap, env};
@@ -22,6 +23,7 @@ pub mod groundstation;
 pub mod render_satellite;
 pub mod socket;
 pub mod util;
+mod datalink;
 #[derive(Resource)]
 struct RefreshConfig {
     timer: Timer,
@@ -313,6 +315,7 @@ fn main() {
     .add_plugin(RetroCameraPlugin)
     .add_plugin(SatRenderPlugin)
     .add_plugin(ShapePlugin)
+    .add_plugin(DatalinkPlugin)
     .add_startup_system(setup);
 
     app.add_plugin(SGP4Plugin);

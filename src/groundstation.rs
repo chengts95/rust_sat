@@ -7,8 +7,7 @@ use bevy_prototype_lyon::prelude::*;
 #[derive(Component, Default)]
 pub struct GroundStationID(pub u64);
 
-#[derive(Component)]
-pub struct GSDataLink(pub (Entity, Entity));
+
 #[derive(Default, Resource)]
 pub struct GSConfigs {
     pub color: Color,
@@ -26,26 +25,28 @@ pub struct GroundStationBundle {
     pub id: GroundStationID,
     pub pos: LatLonAlt,
 }
-pub fn distance_init(
-    mut cmd: Commands,
-    q: Query<Entity, (With<GroundStationID>, Without<NearestSat>)>,
-) {
-    q.for_each(|e| {
-        cmd.entity(e).insert(NearestSat {
-            eid: e,
-            distance: 0.0,
-        });
-    });
-}
+// pub fn distance_init(
+//     mut cmd: Commands,
+//     q: Query<Entity, (With<GroundStationID>, Without<NearestSat>)>,
+// ) {
+//     q.for_each(|e| {
+//         cmd.entity(e).insert(NearestSat {
+//             eid: e,
+//             distance: 0.0,
+//         });
+//     });
+// }
 pub fn distance_update(
-    mut q: Query<(&GroundStationID, &LatLonAlt, &mut NearestSat)>,
+    mut commands: Commands,
+    mut q: Query<(Entity,&GroundStationID, &LatLonAlt)>,
     sats: Query<(Entity, &SatID, &LatLonAlt)>,
 ) {
-    q.for_each_mut(|(_id, gs_llt, mut neareast)| {
+    q.for_each_mut(|(entity,_id, gs_llt)| {
         let res = sats
             .iter()
             .map(|(e, _, llt)| {
                 let dis = distance::ground_space_distance((gs_llt.0 .0, gs_llt.0 .1), (llt.0.0,llt.0.1,1000.0*llt.0.2));
+        
                 NearestSat {
                     eid: e,
                     distance: dis,
@@ -55,7 +56,8 @@ pub fn distance_update(
         if res.is_none() {
             return;
         }
-        *neareast = res.unwrap();
+        commands.entity(entity).insert( res.unwrap());
+
     });
 }
 pub fn print_gs(q: Query<(&GroundStationID, &LatLonAlt, &NearestSat, &WorldCoord)>) {
@@ -115,9 +117,9 @@ pub struct GSPlugin;
 
 impl Plugin for GSPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system_to_stage(CoreStage::PreUpdate, distance_init);
+        //app.add_system_to_stage(CoreStage::PreUpdate, distance_init);
         app.add_system_to_stage(CoreStage::PostUpdate, distance_update);
-        app.add_system_to_stage(CoreStage::PostUpdate, print_gs);
+        //app.add_system_to_stage(CoreStage::PostUpdate, print_gs);
         app.add_system_to_stage(SatRenderStage::SatRenderUpdate, shape_ground_station);
         app.add_system_to_stage(SatRenderStage::SatRenderUpdate, print_cam);
     }
