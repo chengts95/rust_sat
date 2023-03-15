@@ -1,10 +1,11 @@
-use bevy::{prelude::*, render::view::NoFrustumCulling};
+use bevy::{prelude::*, render::view::NoFrustumCulling, time::FixedTimestep};
 use bevy_prototype_lyon::{prelude::*, render::Shape};
+use serde::Serialize;
 
 use crate::{
     celestrak::{LatLonAlt, SatID, TEMEPos},
     groundstation::{GroundStationID, NearestSat},
-    render_satellite::WorldCoord,
+    render_satellite::{SatRenderStage, WorldCoord},
     util::distance,
 };
 
@@ -15,11 +16,18 @@ pub struct GSDataLink(pub (Entity, Entity));
 pub struct DataLink(pub Vec<DataEdge>);
 #[derive(Component)]
 pub struct DataLinkLatency(pub f64);
+
 #[derive(Component)]
+#[component(storage = "SparseSet")]
 pub struct InDataLink(pub Entity);
 
 pub struct DataEdge(pub (Entity, Entity));
 
+#[derive(Component, Default)]
+pub struct DataLinkStats {
+    pub latencies: Vec<f32>,
+    pub distance: Vec<f32>,
+}
 /**
 This function is used to establish data links
 the realisitic datalink should be established
@@ -52,10 +60,43 @@ pub fn init_gslinks(
 }
 
 /**
+This function is used to establish data links
+the realisitic datalink should be established
+via LEO satellite network.
+
+*/
+pub fn rebuild_gslinks(
+    mut cmd: Commands,
+    mut q: Query<(&GSDataLink, &mut DataLink)>,
+    q2: Query<(&GroundStationID, &NearestSat)>,
+) {
+    q.for_each_mut(|(v, mut link)| {
+        let (a, b) = v.0;
+        let res = q2.get(a);
+        let res2 = q2.get(b);
+        if res.is_err() || res2.is_err() {
+            return;
+        }
+        let res = res.unwrap();
+        let res2 = res2.unwrap();
+        for i in &link.0 {
+            cmd.entity(i.0 .0).remove::<InDataLink>();
+            cmd.entity(i.0 .1).remove::<InDataLink>();
+        }
+        let mut dlink: Vec<_> = Vec::new();
+        dlink.push(DataEdge((a, res.1.eid)));
+        dlink.push(DataEdge((res.1.eid, res2.1.eid)));
+
+        dlink.push(DataEdge((res2.1.eid, b)));
+        *link = DataLink(dlink);
+    });
+}
+
+/**
 When the datalink is established, we should mark the sate or ground
 station entity with a flag.
 */
-pub fn init_links(mut cmd: Commands, q: Query<(Entity, &DataLink), Added<DataLink>>) {
+pub fn init_links(mut cmd: Commands, q: Query<(Entity, &DataLink), Changed<DataLink>>) {
     q.for_each(|(entity, v)| {
         let v = &v.0;
         for i in v {
@@ -76,6 +117,7 @@ pub fn compute_latency(
     q3: Query<(&GroundStationID, &LatLonAlt), With<InDataLink>>,
 ) {
     q.for_each(|(entity, v)| {
+        let mut data = DataLinkStats::default();
         let v = &v.0;
         let mut sum = 0.0;
         for i in v {
@@ -110,10 +152,14 @@ pub fn compute_latency(
                     (llt.0 .0, llt.0 .1, 1000.0 * llt.0 .2),
                 );
             }
-            sum += (dis / 3e8);
+            sum += dis;
+            data.distance.push(dis as f32);
+            data.latencies.push((dis / 299792458.0) as f32);
         }
-
-        cmd.entity(entity).insert(DataLinkLatency(sum));
+        if sum > 0.0 {
+            cmd.entity(entity).insert(data);
+            cmd.entity(entity).insert(DataLinkLatency(sum));
+        }
     });
 }
 
@@ -123,7 +169,7 @@ Add a shape to this datalink.
 pub fn init_data_link(
     mut commands: Commands,
     q: Query<(Entity, &DataLink), Without<Shape>>,
-    points: Query<&WorldCoord, (With<InDataLink>)>,
+    points: Query<&WorldCoord, With<InDataLink>>,
 ) {
     q.for_each(|(entity, v)| {
         let v = &v.0;
@@ -142,24 +188,27 @@ pub fn init_data_link(
             path_builder.line_to(pos.0);
         }
         let line = path_builder.build();
-
-        commands.entity(entity).insert(GeometryBuilder::build_as(
-            &line,
-            DrawMode::Stroke(StrokeMode::new(Color::GREEN, 0.1)),
-            Transform::default(),
-        )).insert(NoFrustumCulling);
+        let mut t = Transform::default();
+        t.translation.z = 1.0f32;
+        commands
+            .entity(entity)
+            .insert(GeometryBuilder::build_as(
+                &line,
+                DrawMode::Stroke(StrokeMode::new(Color::GREEN, 0.1)),
+                t,
+            ))
+            .insert(NoFrustumCulling);
     });
 }
-
 
 /**
 update data link path in real time because satellite is moving.
 */
 pub fn update_data_link(
-    mut q: Query<(Entity, &DataLink,&mut Path)>,
-    points: Query<&WorldCoord, (With<InDataLink>)>,
+    mut q: Query<(Entity, &DataLink, &mut Path)>,
+    points: Query<&WorldCoord, With<InDataLink>>,
 ) {
-    q.for_each_mut(|(entity, v,mut path)| {
+    q.for_each_mut(|(_entity, v, mut path)| {
         let v = &v.0;
         let mut path_builder = PathBuilder::new();
 
@@ -179,7 +228,7 @@ pub fn update_data_link(
         let line = path_builder.build();
 
         *path = line;
-       
+
         // commands.entity(entity).insert(GeometryBuilder::build_as(
         //     &line,
         //     DrawMode::Stroke(StrokeMode::new(Color::GREEN, 10.0)),
@@ -195,13 +244,18 @@ pub struct DatalinkPlugin;
 impl Plugin for DatalinkPlugin {
     fn build(&self, app: &mut App) {
         app.add_stage_after(
-            CoreStage::PostUpdate,
+            SatRenderStage::SatRenderUpdate,
             LinkRenderStage::RenderUpdate,
             SystemStage::parallel()
                 .with_system(init_gslinks)
-                .with_system(init_links)
-                .with_system(init_data_link)
-                .with_system(update_data_link),
+                .with_system(init_links.after(init_gslinks))
+                .with_system(init_data_link.after(init_links))
+                .with_system(
+                    rebuild_gslinks
+                        .with_run_criteria(FixedTimestep::step(10.0))
+                        .after(update_data_link),
+                )
+                .with_system(update_data_link.after(init_data_link)),
         );
         app.add_system(compute_latency);
     }

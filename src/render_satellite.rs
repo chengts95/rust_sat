@@ -55,6 +55,7 @@ pub enum SatLabel {
     Coord,
     Alt,
 }
+#[allow(dead_code)]
 fn wgs84_scaler_define(mut proj: ResMut<GoogleProjector>, mut events: EventReader<WindowResized>) {
     for i in events.iter() {
         //proj.zoom = (i.height as i32)/proj.tilesize;
@@ -123,6 +124,7 @@ fn google_world_coord(
         commands.entity(e).insert(WorldCoord(xy));
     });
 }
+#[allow(dead_code)]
 fn wgs84_world_coord(
     mut commands: Commands,
     mut q: Query<(Entity, &LatLonAlt, &mut WorldCoord), Changed<LatLonAlt>>,
@@ -189,7 +191,7 @@ fn update_labels(
                         text.sections[0].value = format!("{:.2}°,{:.2}°", lla.0 .1, lla.0 .0)
                     }
                     SatLabel::Alt => text.sections[0].value = format!("{:.2} km", lla.0 .2),
-                    _ => unreachable!(),
+                    
                 }
             }
         }
@@ -214,7 +216,7 @@ fn shape_satellite(
         let xy = lla.0;
         let trans = Transform::from_xyz(xy.x, xy.y, 1.0);
         let shape = shapes::Circle {
-            radius: 1.0 / 3.14,
+            radius: 2.0 / 3.14,
             center: Vec2::ZERO,
         };
 

@@ -5,29 +5,31 @@ use bevy::{
     prelude::*,
     render::view::NoFrustumCulling,
     sprite::Mesh2dHandle,
-    window::WindowResized,
 };
 use bevy_egui::{egui, EguiContext, EguiPlugin};
 use bevy_embedded_assets::EmbeddedAssetPlugin;
 use bevy_prototype_lyon::prelude::ShapePlugin;
 use bevy_retro_camera::{RetroCameraBundle, RetroCameraPlugin};
 use datalink::{DatalinkPlugin, GSDataLink};
-use groundstation::{GSConfigs,GSPlugin, GroundStationBundle, GroundStationID};
+use egui::Layout;
+use groundstation::{GSConfigs, GSPlugin, GroundStationBundle, GroundStationID};
 
 use rfd::AsyncFileDialog;
 use std::{collections::HashMap, env};
 
 use bevy_svg::prelude::*;
 pub mod celestrak;
+mod datalink;
 pub mod groundstation;
 pub mod render_satellite;
 pub mod socket;
 pub mod util;
-mod datalink;
-#[derive(Resource)]
-struct RefreshConfig {
-    timer: Timer,
-}
+#[cfg(feature = "zmq_comm")]
+pub mod zmq_comm;
+// #[derive(Resource)]
+// struct RefreshConfig {
+//     timer: Timer,
+// }
 #[derive(Resource)]
 struct CursorPosition(Vec2);
 #[derive(Default)]
@@ -50,8 +52,10 @@ fn show_data(
     mut egui_context: ResMut<EguiContext>,
     mut satcfg: ResMut<SatConfigs>,
     mut gscfg: ResMut<GSConfigs>,
+    mut cccfg: ResMut<ClearColor>,
     mut uidata: ResMut<UIData>,
     mut query: ResMut<QueryConfig>,
+
     c: Res<CursorPosition>,
     mut cam: Query<(&mut OrthographicProjection, &mut Transform)>,
     rt: Res<celestrak::Runtime>,
@@ -94,7 +98,13 @@ fn show_data(
         .unwrap_or(&false.into())
         .as_bool()
         .unwrap();
-    config_ui(&mut egui_context, &mut satcfg, &mut gscfg, &mut opened);
+    config_ui(
+        &mut egui_context,
+        &mut satcfg,
+        &mut gscfg,
+        &mut cccfg,
+        &mut opened,
+    );
     uidata.0["Config"] = opened.into();
     let mut opened = uidata
         .0
@@ -192,6 +202,7 @@ fn config_ui(
     egui_context: &mut ResMut<EguiContext>,
     satcfg: &mut ResMut<SatConfigs>,
     gscfg: &mut ResMut<GSConfigs>,
+    cccfg: &mut ResMut<ClearColor>,
     opened: &mut bool,
 ) {
     egui::Window::new("Configs")
@@ -243,6 +254,29 @@ fn config_ui(
                 ];
                 gscfg.color = Color::from(srgba);
             }
+            ui.label("Clear Color:");
+            let a = cccfg.0.clone();
+            let mut srgba = unsafe {
+                let ptr = (&mut a.as_rgba_u32() as *mut u32) as *mut u8;
+
+                let srgba = egui::Color32::from_rgba_premultiplied(
+                    *ptr.offset(0),
+                    *ptr.offset(1),
+                    *ptr.offset(2),
+                    *ptr.offset(3),
+                );
+                srgba
+            };
+            if ui.color_edit_button_srgba(&mut srgba).changed() {
+                let (r, g, b, a) = srgba.to_tuple();
+                let srgba: [f32; 4] = [
+                    r as f32 / 255.0,
+                    g as f32 / 255.0,
+                    b as f32 / 255.0,
+                    a as f32 / 255.0,
+                ];
+                cccfg.0 = Color::from(srgba);
+            }
         });
 }
 
@@ -252,7 +286,7 @@ fn create_table<'a, T: ExactSizeIterator + Iterator<Item = &'a [String; 6]>>(
 ) {
     let v: Vec<_> = iter.collect();
     let _tb = egui_extras::TableBuilder::new(ui)
-        .columns(egui_extras::Size::remainder().at_least(50.0), 6)
+        .columns(egui_extras::Column::remainder().resizable(true), 6)
         .header(50.0, |mut header| {
             header.col(|ui| {
                 ui.heading("Entity ID");
@@ -319,6 +353,14 @@ fn main() {
     .add_startup_system(setup);
 
     app.add_plugin(SGP4Plugin);
+    #[cfg(feature = "zmq_comm")]
+    {
+        let mut zmq = zmq_comm::ZMQContext::default();
+        zmq.tx_address = "tcp://127.0.0.1:5551".into();
+        zmq.rx_address = "tcp://127.0.0.1:5552".into();
+        app.insert_resource(zmq);
+        app.add_plugin(zmq_comm::ZMQPlugin);
+    }
     app.insert_resource(UIData::default());
     app.add_stage_before(
         CoreStage::PreUpdate,
@@ -338,61 +380,62 @@ fn main() {
         "egui",
         SystemStage::parallel().with_system(show_data),
     );
+    // app.add_system(test);
     app.run();
 }
 
-fn resize_map(
-    mut svg: Query<(&Handle<Svg>, &mut Transform)>,
-    svgs: Res<Assets<Svg>>,
-    mut events: EventReader<WindowResized>,
-) {
-    for i in events.iter() {
-        svg.for_each_mut(|(s, mut trans)| {
-            let _siz = svgs.get(s).unwrap().size;
+// fn resize_map(
+//     mut svg: Query<(&Handle<Svg>, &mut Transform)>,
+//     svgs: Res<Assets<Svg>>,
+//     mut events: EventReader<WindowResized>,
+// ) {
+//     for i in events.iter() {
+//         svg.for_each_mut(|(s, mut trans)| {
+//             let _siz = svgs.get(s).unwrap().size;
 
-            trans.scale.x = i.width / 1024.0;
-            trans.scale.y = i.height / 1024.0;
-        });
-    }
-}
-fn resize_map2(mut spr: Query<(&Sprite, &mut Transform)>, mut events: EventReader<WindowResized>) {
-    for i in events.iter() {
-        spr.for_each_mut(|(_, mut trans)| {
-            trans.scale[0] = i.width / 1024.0;
-            trans.scale[1] = i.height / 1024.0;
-        });
-    }
-}
+//             trans.scale.x = i.width / 1024.0;
+//             trans.scale.y = i.height / 1024.0;
+//         });
+//     }
+// }
+// fn resize_map2(mut spr: Query<(&Sprite, &mut Transform)>, mut events: EventReader<WindowResized>) {
+//     for i in events.iter() {
+//         spr.for_each_mut(|(_, mut trans)| {
+//             trans.scale[0] = i.width / 1024.0;
+//             trans.scale[1] = i.height / 1024.0;
+//         });
+//     }
+// }
 
-fn cam_input_handle(
-    scroll_evr: EventReader<MouseWheel>,
-    mut ev_motion: EventReader<MouseMotion>,
-    input_mouse: Res<Input<MouseButton>>,
+// fn cam_input_handle(
+//     scroll_evr: EventReader<MouseWheel>,
+//     mut ev_motion: EventReader<MouseMotion>,
+//     input_mouse: Res<Input<MouseButton>>,
 
-    mut q: Query<(&mut OrthographicProjection, &mut Transform), With<Camera2d>>,
-) {
-    let mut acc = 0;
-    scroll_handler(scroll_evr, &mut acc);
+//     mut q: Query<(&mut OrthographicProjection, &mut Transform), With<Camera2d>>,
+// ) {
+//     let mut acc = 0;
+//     scroll_handler(scroll_evr, &mut acc);
 
-    q.for_each_mut(|(mut x, mut trans)| {
-        let mut zoom = x.scale.ln();
-        zoom += 0.1 * acc as f32;
-        x.scale = zoom.exp();
-        x.scale = x.scale.clamp(0.0, 1.2);
+//     q.for_each_mut(|(mut x, mut trans)| {
+//         let mut zoom = x.scale.ln();
+//         zoom += 0.1 * acc as f32;
+//         x.scale = zoom.exp();
+//         x.scale = x.scale.clamp(0.0, 1.2);
 
-        if input_mouse.pressed(MouseButton::Middle) {
-            for ev in ev_motion.iter() {
-                trans.translation = trans.translation - Vec3::new(ev.delta.x, -ev.delta.y, 0.0);
-            }
-            // if trans.translation.x < 0.0 {
-            //     trans.translation.x = 0.0
-            // }
-            // if trans.translation.y < 0.0 {
-            //     trans.translation.y = 0.0
-            // }
-        }
-    });
-}
+//         if input_mouse.pressed(MouseButton::Middle) {
+//             for ev in ev_motion.iter() {
+//                 trans.translation = trans.translation - Vec3::new(ev.delta.x, -ev.delta.y, 0.0);
+//             }
+//             // if trans.translation.x < 0.0 {
+//             //     trans.translation.x = 0.0
+//             // }
+//             // if trans.translation.y < 0.0 {
+//             //     trans.translation.y = 0.0
+//             // }
+//         }
+//     });
+// }
 
 fn retro_cam_input_handle(
     scroll_evr: EventReader<MouseWheel>,
@@ -483,14 +526,16 @@ fn scroll_handler(mut scroll_evr: EventReader<MouseWheel>, acc: &mut i32) {
         }
     }
 }
+
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>, wnd: Res<Windows>) {
     let svg = asset_server.load("webworld2.svg");
+
     let e1 = commands
         .spawn(GroundStationBundle {
             id: GroundStationID(0),
             pos: LatLonAlt((51.00, -114.029, 0.0)),
         })
-        .insert(Name::new("Calgary\n卡尔加里"))
+        .insert(Name::new("Calgary\nStation 1"))
         .id();
 
     let e2 = commands
@@ -498,7 +543,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, wnd: Res<Window
             id: GroundStationID(1),
             pos: LatLonAlt((44.21895, -80.11, 0.0)),
         })
-        .insert(Name::new("Toronto\n多伦多"))
+        .insert(Name::new("Toronto\nStation 2"))
         .id();
     let edge = (e1, e2);
     commands.spawn(GSDataLink(edge)).insert(Name::new("卡多线"));

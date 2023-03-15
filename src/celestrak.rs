@@ -10,14 +10,14 @@ use std::{
 };
 
 use chrono::Datelike;
-use chrono::{DateTime, TimeZone, Timelike, Utc};
+use chrono::{DateTime, Timelike, Utc};
 
 use serde::{Deserialize, Serialize};
 use sgp4::{Constants, Elements};
 
 //https://celestrak.org/NORAD/elements/gp.php?GROUP=STARLINK&FORMAT=TLE
 pub(crate) async fn get_sat_data() -> Result<Vec<sgp4::Elements>, reqwest::Error> {
-    let resp =
+    let resp =//?GROUP=STARLINK
         reqwest::get("https://celestrak.org/NORAD/elements/gp.php?GROUP=STARLINK&FORMAT=JSON")
             .await?
             .json::<Vec<sgp4::Elements>>()
@@ -51,8 +51,7 @@ pub struct LatLonAlt(pub (f64, f64, f64));
 
 #[derive(Component)]
 pub struct TLETimeStamp(pub i64);
-#[derive(Default, Serialize, Deserialize)]
-#[derive(Resource)]
+#[derive(Default, Serialize, Deserialize, Resource)]
 pub struct SatInfo {
     pub sats: HashMap<u64, sgp4::Elements>,
 }
@@ -120,6 +119,8 @@ fn update_sat_pos(
         &Name,
     )>,
 ) {
+    use std::time::Instant;
+    let now = Instant::now();
     sats.for_each_mut(|(ts, constants, mut pos, mut vel, n)| {
         if let Ok((p, v)) = propagate_sat(ts.0 as f64, &constants.0) {
             *pos = p;
@@ -171,10 +172,13 @@ pub fn init_sat_data(mut cmd: Commands, rt: Res<Runtime>) {
     let s = rt.0.block_on(get_sat_data()).unwrap();
     let mut sat_info = SatInfo::default();
     for elements in s {
-        if elements.object_name.as_ref().unwrap().contains(&"STARLINK") {
-            sat_info.sats.insert(elements.norad_id, elements);
-        }
+    sat_info.sats.insert(elements.norad_id, elements);
     }
+    // for elements in s {
+    //     if elements.object_name.as_ref().unwrap().contains(&"STARLINK") {
+    //         sat_info.sats.insert(elements.norad_id, elements);
+    //     }
+    // }
 
     for (_k, elements) in &sat_info.sats {
         let id = SatID(elements.norad_id);
