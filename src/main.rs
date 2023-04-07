@@ -1,19 +1,19 @@
 //"https://satellitemap.space/json"
 
+
 use bevy::{
     input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
     prelude::*,
     render::view::NoFrustumCulling,
     sprite::Mesh2dHandle,
 };
-use bevy_egui::{egui, EguiContext, EguiPlugin};
+use bevy_egui::{egui, EguiContexts, EguiPlugin, EguiSet};
 use bevy_embedded_assets::EmbeddedAssetPlugin;
 use bevy_prototype_lyon::prelude::ShapePlugin;
 use bevy_retro_camera::{RetroCameraBundle, RetroCameraPlugin};
 use datalink::{DatalinkPlugin, GSDataLink};
-use egui::Layout;
-use groundstation::{GSConfigs, GSPlugin, GroundStationBundle, GroundStationID};
 
+use groundstation::{GSConfigs, GSPlugin, GroundStationBundle, GroundStationID};
 use rfd::AsyncFileDialog;
 use std::{collections::HashMap, env};
 
@@ -49,7 +49,7 @@ struct SatConfigs {
     visible: Vec<Entity>,
 }
 fn show_data(
-    mut egui_context: ResMut<EguiContext>,
+    mut egui_context: EguiContexts,
     mut satcfg: ResMut<SatConfigs>,
     mut gscfg: ResMut<GSConfigs>,
     mut cccfg: ResMut<ClearColor>,
@@ -157,11 +157,11 @@ fn show_data(
 
             if ui.button("apply to map").clicked() {
                 vis.for_each_mut(|mut y| {
-                    y.is_visible = false;
+                    *y = Visibility::Hidden;
                 });
                 for i in &satcfg.visible {
                     if let Ok(mut s) = vis.get_mut(*i) {
-                        s.is_visible = true;
+                        *s = Visibility::Visible;
                     }
                 }
             }
@@ -199,7 +199,7 @@ fn show_data(
 }
 
 fn config_ui(
-    egui_context: &mut ResMut<EguiContext>,
+    egui_context: &mut EguiContexts,
     satcfg: &mut ResMut<SatConfigs>,
     gscfg: &mut ResMut<GSConfigs>,
     cccfg: &mut ResMut<ClearColor>,
@@ -320,6 +320,14 @@ fn create_table<'a, T: ExactSizeIterator + Iterator<Item = &'a [String; 6]>>(
             });
         });
 }
+
+#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
+
+struct EguiUISet;
+
+#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
+#[system_set(base)]
+struct InputSet;
 fn main() {
     let mut app = App::new();
 
@@ -333,12 +341,11 @@ fn main() {
     app.add_plugins(
         DefaultPlugins
             .set(WindowPlugin {
-                window: WindowDescriptor {
-                    title: "Satellite".to_string(),
+                primary_window: Some(Window {
+                    title: String::from("RustSat-Satellite Tracking"),
                     ..Default::default()
-                },
-
-                ..Default::default()
+                }),
+                ..default()
             })
             .set(ImagePlugin::default_nearest())
             .build()
@@ -362,10 +369,11 @@ fn main() {
         app.add_plugin(zmq_comm::ZMQPlugin);
     }
     app.insert_resource(UIData::default());
-    app.add_stage_before(
-        CoreStage::PreUpdate,
-        "inputs",
-        SystemStage::single_threaded().with_system(retro_cam_input_handle),
+    app.add_system(retro_cam_input_handle.in_base_set(InputSet));
+    app.configure_set(
+        InputSet
+            .after(CoreSet::FirstFlush)
+            .before(CoreSet::PreUpdate),
     );
     app.insert_resource(GSConfigs {
         color: Color::YELLOW,
@@ -373,12 +381,13 @@ fn main() {
     });
     app.add_plugin(GSPlugin);
     //app.add_system_to_stage(CoreStage::PreUpdate, resize_map);
-    app.add_system_to_stage(CoreStage::PreUpdate, get_cursor_coord);
+    app.add_system(get_cursor_coord.in_base_set(CoreSet::PreUpdate));
     app.add_system(check_vis);
-    app.add_stage_before(
-        CoreStage::PostUpdate,
-        "egui",
-        SystemStage::parallel().with_system(show_data),
+    app.add_system(show_data.in_set(EguiUISet));
+    app.configure_set(
+        EguiUISet
+            .after(EguiSet::InitContexts)
+            .in_base_set(CoreSet::Update),
     );
     // app.add_system(test);
     app.run();
@@ -487,7 +496,11 @@ fn check_vis(
         let rb = Vec2::new(center.x + dis, center.y + dis);
         q2.for_each_mut(|(mut vis, transform)| {
             let s = transform.translation();
-            vis.is_visible = s.x > lb.x && s.y > lb.y && s.x < rb.x && s.y < rb.y
+            *vis = if s.x > lb.x && s.y > lb.y && s.x < rb.x && s.y < rb.y {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            };
         });
     });
 }
@@ -495,10 +508,12 @@ fn check_vis(
 fn get_cursor_coord(
     mut commands: Commands,
     cc: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
-    wnds: Res<Windows>,
+    wnds: Query<&Window>,
 ) {
     let (camera, camera_transform) = cc.single();
-    for wnd in wnds.iter() {
+    // for wnd in wnds.iter()
+    let wnd = wnds.single();
+    {
         if let Some(screen_pos) = wnd.cursor_position() {
             let window_size = Vec2::new(wnd.width() as f32, wnd.height() as f32);
 
@@ -527,7 +542,7 @@ fn scroll_handler(mut scroll_evr: EventReader<MouseWheel>, acc: &mut i32) {
     }
 }
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>, wnd: Res<Windows>) {
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     let svg = asset_server.load("webworld2.svg");
 
     let e1 = commands
@@ -563,8 +578,6 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, wnd: Res<Window
     camera.transform.translation.y = 512.0;
 
     commands.spawn(camera);
-
-    let _a = wnd.primary();
 
     commands
         .spawn(Svg2dBundle {

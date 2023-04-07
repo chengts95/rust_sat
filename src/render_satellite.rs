@@ -88,14 +88,22 @@ fn show_label(
 
         let not_visible = a.scale > factor;
         q.for_each_mut(|mut f| {
-            f.is_visible = !not_visible;
+            *f = if not_visible {
+                Visibility::Hidden
+            } else {
+                Visibility::Inherited
+            };
         });
     }
     if !cam2.is_empty() {
         let a = cam2.single();
         let not_visible = a.scale > factor;
         q.for_each_mut(|mut f| {
-            f.is_visible = !not_visible;
+            *f = if not_visible {
+                Visibility::Hidden
+            } else {
+                Visibility::Inherited
+            };
         });
     }
 }
@@ -164,12 +172,10 @@ fn move_satellite(mut q: Query<(&mut Transform, &WorldCoord), Changed<WorldCoord
         transform.translation.y = coord.0.y;
     });
 }
-fn color_update(color: Res<SatConfigs>, mut q: Query<(&SatID, &mut DrawMode)>) {
+fn color_update(color: Res<SatConfigs>, mut q: Query<(&SatID, &mut Fill)>) {
     if color.is_changed() {
         q.for_each_mut(|(_a, mut c)| {
-            *c = DrawMode::Fill {
-                0: FillMode::color(color.sat_color),
-            };
+            *c = Fill::color(color.sat_color);
         });
     }
 }
@@ -191,7 +197,6 @@ fn update_labels(
                         text.sections[0].value = format!("{:.2}°,{:.2}°", lla.0 .1, lla.0 .0)
                     }
                     SatLabel::Alt => text.sections[0].value = format!("{:.2} km", lla.0 .2),
-                    
                 }
             }
         }
@@ -214,52 +219,43 @@ fn shape_satellite(
     };
     q.for_each(|(e, lla, n)| {
         let xy = lla.0;
-        let trans = Transform::from_xyz(xy.x, xy.y, 1.0);
+        let transform = Transform::from_xyz(xy.x, xy.y, 1.0);
         let shape = shapes::Circle {
             radius: 2.0 / 3.14,
             center: Vec2::ZERO,
         };
+        let shape = ShapeBundle {
+            path: GeometryBuilder::build_as(&shape),
+            transform,
+            ..Default::default()
+        };
+        commands
+            .entity(e)
+            .insert((shape, Fill::color(color.sat_color)));
 
-        commands.entity(e).insert(GeometryBuilder::build_as(
-            &shape,
-            DrawMode::Fill {
-                0: FillMode::color(color.sat_color),
-            },
-            trans,
-        ));
-
-        commands.entity(e).with_children(|parent| {
-            parent
-                .spawn(Text2dBundle {
-                    text: Text::from_section(n.as_str(), text_style.clone())
-                        .with_alignment(TextAlignment::CENTER),
-                    transform: Transform::from_xyz(0.0, -2.0, 1.1)
+        commands.entity(e).with_children(|p| {
+            for (i, label) in [
+                (n.as_str(), SatLabel::Name),
+                ("", SatLabel::Coord),
+                ("", SatLabel::Alt),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                p.spawn(Text2dBundle {
+                    text: Text::from_section(label.0, text_style.clone())
+                        .with_alignment(TextAlignment::Center),
+                    transform: Transform::from_xyz(0.0, -2.0 - i as f32, 1.1)
                         .with_scale([0.04, 0.04, 0.0].into()),
                     ..default()
                 })
-                .insert(SatLabel::Name);
-            parent
-                .spawn(Text2dBundle {
-                    text: Text::from_section("", text_style.clone())
-                        .with_alignment(TextAlignment::CENTER),
-                    transform: Transform::from_xyz(0.0, -3.0, 1.1)
-                        .with_scale([0.04, 0.04, 0.0].into()),
-                    ..default()
-                })
-                .insert(SatLabel::Coord);
-            parent
-                .spawn(Text2dBundle {
-                    text: Text::from_section("", text_style.clone())
-                        .with_alignment(TextAlignment::CENTER),
-                    transform: Transform::from_xyz(0.0, -4.0, 1.1)
-                        .with_scale([0.04, 0.04, 0.0].into()),
-                    ..default()
-                })
-                .insert(SatLabel::Alt);
+                .insert(label.1);
+            }
         });
     });
 }
-#[derive(Debug, Hash, PartialEq, Eq, Clone, StageLabel)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
+#[system_set(base)]
 pub enum SatRenderStage {
     SatRenderUpdate,
 }
@@ -273,29 +269,30 @@ impl Plugin for SatRenderPlugin {
             scaler: Vec2 { x: 1.0, y: 1.0 },
             ..default()
         });
-        app.add_stage_after(
-            CoreStage::PostUpdate,
-            SatRenderStage::SatRenderUpdate,
-            SystemStage::parallel()
-                .with_system(shape_satellite)
-                .with_system(google_scaler_define)
-                .with_system(color_update)
-                .with_system(update_labels),
+        app.configure_set(SatRenderStage::SatRenderUpdate.after(CoreSet::PostUpdate).before(CoreSet::Last));
+        app.add_systems(
+            (
+                shape_satellite,
+                google_scaler_define,
+                color_update,
+                update_labels,
+            )
+                .in_base_set(SatRenderStage::SatRenderUpdate),
         );
-        app.add_system_to_stage(CoreStage::PostUpdate, move_satellite);
-        app.add_system_to_stage(CoreStage::PreUpdate, google_world_coord);
 
-        app.add_system_to_stage(CoreStage::PreUpdate, show_label);
-        let shape = shapes::Circle {
-            radius: 2.0,
-            center: Vec2::ZERO,
-        };
-        app.world.spawn(GeometryBuilder::build_as(
-            &shape,
-            DrawMode::Fill {
-                0: FillMode::color(Color::YELLOW),
-            },
-            Transform::from_xyz(0.0, 0.0, 0.0),
-        ));
+        app.add_system(move_satellite.in_base_set(CoreSet::PostUpdate));
+        app.add_system(google_world_coord.in_base_set(CoreSet::PreUpdate));
+
+        app.add_system(show_label.in_base_set(CoreSet::PreUpdate));
+        // let shape = shapes::Circle {
+        //     radius: 2.0,
+        //     center: Vec2::ZERO,
+        // };
+        // let shape = ShapeBundle {
+        //     path: GeometryBuilder::build_as(&shape),
+        //     transform: Transform::from_xyz(0.0, 0.0, 0.0),
+        //     ..Default::default()
+        // };
+        // app.world.spawn((shape, Fill::color(Color::YELLOW)));
     }
 }

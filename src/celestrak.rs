@@ -2,7 +2,7 @@
 //"https://api.n2yo.com/rest/v1/satellite/"
 //tle/52997&apiKey=
 
-use bevy::{prelude::*, time::FixedTimestep};
+use bevy::{prelude::*};
 
 use std::{
     collections::HashMap,
@@ -120,7 +120,7 @@ fn update_sat_pos(
     )>,
 ) {
     use std::time::Instant;
-    let now = Instant::now();
+    let _now = Instant::now();
     sats.for_each_mut(|(ts, constants, mut pos, mut vel, n)| {
         if let Ok((p, v)) = propagate_sat(ts.0 as f64, &constants.0) {
             *pos = p;
@@ -172,7 +172,7 @@ pub fn init_sat_data(mut cmd: Commands, rt: Res<Runtime>) {
     let s = rt.0.block_on(get_sat_data()).unwrap();
     let mut sat_info = SatInfo::default();
     for elements in s {
-    sat_info.sats.insert(elements.norad_id, elements);
+        sat_info.sats.insert(elements.norad_id, elements);
     }
     // for elements in s {
     //     if elements.object_name.as_ref().unwrap().contains(&"STARLINK") {
@@ -238,18 +238,13 @@ impl Plugin for SGP4Plugin {
         app.insert_resource(rt);
         app.insert_resource(SatInfo::default());
         app.add_startup_system(init_sat_data);
-        app.add_system_to_stage(CoreStage::PreUpdate, update_data);
-        app.add_system_to_stage(CoreStage::Update, receive_task);
-        app.add_system_to_stage(CoreStage::Update, update_every_sat.after(receive_task));
-        app.add_system_to_stage(
-            CoreStage::Update,
-            update_sat_pos
-                .after(update_every_sat)
-                .with_run_criteria(FixedTimestep::step(1.0 / 60.0)),
+        app.add_system(update_data.in_base_set(CoreSet::PreUpdate));
+        app.add_systems(
+            (receive_task, update_every_sat, update_sat_pos)
+                .chain()
+                .in_base_set(CoreSet::Update),
         );
-        app.add_system_to_stage(
-            CoreStage::Update,
-            update_lonlat.with_run_criteria(FixedTimestep::step(1.0 / 60.0)),
-        );
+
+        app.add_system(update_lonlat);
     }
 }

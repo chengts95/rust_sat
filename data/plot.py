@@ -45,6 +45,14 @@ ax2.set_xlabel('ts(s)')
 
 ax1.legend()
 ax2.legend()
-
+import h5py
+import numpy as np
+with h5py.File("results.hdf5", "w") as f:
+    dset = f.create_dataset("ts", (len(ts),), dtype='float64')
+    dset.write_direct(np.array(ts))
+    dset = f.create_dataset("latency", (len(latency),3), dtype='float64')
+    dset.write_direct(np.array(latency))
+    dset = f.create_dataset("sum_latency", (len(sum_lantency),), dtype='float64')
+    dset.write_direct(np.array(sum_lantency))
 # 展示这幅绚丽的图画，让它如繁星般璀璨~♪
 plt.show()

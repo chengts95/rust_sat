@@ -1,9 +1,9 @@
 use std::{string::String, time::SystemTime};
 
-use bevy::{app::AppExit, prelude::*, time::FixedTimestep};
+use bevy::{app::AppExit, prelude::*};
 
 use serde::Serialize;
-use serde_json::json;
+
 use zmq::*;
 
 use crate::datalink::*;
@@ -81,19 +81,16 @@ fn close_zmq(reader: EventReader<AppExit>, mut ctx: ResMut<ZMQContext>) {
 #[derive(Default)]
 pub struct ZMQPlugin;
 
-#[derive(Default, StageLabel)]
+
+#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
+#[system_set(base)]
 pub struct CommStage;
 
 impl Plugin for ZMQPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(connect_sockets);
 
-        app.add_stage_after(
-            CoreStage::PostUpdate,
-            CommStage,
-            SystemStage::single_threaded()
-                .with_system(publish_data.with_run_criteria(FixedTimestep::step(1.0 / 60.0)))
-               //.with_system(close_zmq.after(publish_data)),
-        );
+        app.add_system(publish_data.in_base_set(CommStage));
+        app.configure_set(CommStage.after(CoreSet::PostUpdate));
     }
 }

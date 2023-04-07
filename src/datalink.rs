@@ -1,6 +1,7 @@
-use bevy::{prelude::*, render::view::NoFrustumCulling, time::FixedTimestep};
-use bevy_prototype_lyon::{prelude::*, render::Shape};
-use serde::Serialize;
+use bevy::{prelude::*, render::view::NoFrustumCulling, time::common_conditions::{on_fixed_timer, on_timer}};
+use bevy_prototype_lyon::{prelude::*};
+use std::time::Duration;
+
 
 use crate::{
     celestrak::{LatLonAlt, SatID, TEMEPos},
@@ -168,7 +169,7 @@ Add a shape to this datalink.
 */
 pub fn init_data_link(
     mut commands: Commands,
-    q: Query<(Entity, &DataLink), Without<Shape>>,
+    q: Query<(Entity, &DataLink), Without<Path>>,
     points: Query<&WorldCoord, With<InDataLink>>,
 ) {
     q.for_each(|(entity, v)| {
@@ -190,14 +191,16 @@ pub fn init_data_link(
         let line = path_builder.build();
         let mut t = Transform::default();
         t.translation.z = 1.0f32;
+        let stroke = Stroke::new(Color::GREEN, 0.1);
+        let shape = ShapeBundle {
+            path:line ,
+            transform:t,
+            ..Default::default()
+        };
         commands
             .entity(entity)
-            .insert(GeometryBuilder::build_as(
-                &line,
-                DrawMode::Stroke(StrokeMode::new(Color::GREEN, 0.1)),
-                t,
-            ))
-            .insert(NoFrustumCulling);
+            .insert((NoFrustumCulling,shape,stroke))
+            ;
     });
 }
 
@@ -236,27 +239,28 @@ pub fn update_data_link(
         // ));
     });
 }
-#[derive(Debug, Hash, PartialEq, Eq, Clone, StageLabel)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
+#[system_set(base)]
 pub enum LinkRenderStage {
     RenderUpdate,
 }
 pub struct DatalinkPlugin;
 impl Plugin for DatalinkPlugin {
     fn build(&self, app: &mut App) {
-        app.add_stage_after(
-            SatRenderStage::SatRenderUpdate,
-            LinkRenderStage::RenderUpdate,
-            SystemStage::parallel()
-                .with_system(init_gslinks)
-                .with_system(init_links.after(init_gslinks))
-                .with_system(init_data_link.after(init_links))
-                .with_system(
-                    rebuild_gslinks
-                        .with_run_criteria(FixedTimestep::step(10.0))
-                        .after(update_data_link),
-                )
-                .with_system(update_data_link.after(init_data_link)),
+        app.add_systems(
+            (init_gslinks, init_links, init_data_link, update_data_link)
+                .in_base_set(LinkRenderStage::RenderUpdate)
+                .chain(),
         );
+
+        app.configure_set(LinkRenderStage::RenderUpdate.after(SatRenderStage::SatRenderUpdate));
+        app.add_system(rebuild_gslinks.run_if(on_timer(Duration::from_secs_f32(10.0))));
+        // .with_system(
+        //     rebuild_gslinks
+        //         .with_run_criteria(FixedTimestep::step(10.0))
+        //         .after(update_data_link),
+        // )
+
         app.add_system(compute_latency);
     }
 }

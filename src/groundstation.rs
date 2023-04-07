@@ -60,9 +60,9 @@ pub fn distance_update(
 
     });
 }
-pub fn print_gs(q: Query<(&GroundStationID, &LatLonAlt, &NearestSat, &WorldCoord)>) {
-    q.for_each(|(_id, _llt, sat, _w)| {
-        info!("{}", sat.distance);
+pub fn print_gs(q: Query<(&GroundStationID, &Transform)>) {
+    q.for_each(|(_id, trans)| {
+        info!("{}", trans.translation);
     });
 }
 
@@ -85,42 +85,54 @@ fn shape_ground_station(
     q.for_each(|(e, lla, n)| {
         info!("{}", lla.0);
         let xy = lla.0;
-        let trans = Transform::from_xyz(xy.x, xy.y, 1.0);
+        let transform = Transform::from_xyz(xy.x, xy.y, 1.0);
         let shape = shapes::Circle {
-            radius: 1.0 / 3.14,
+            radius: 2.0 / 3.14,
             center: Vec2::ZERO,
         };
-        commands.entity(e).insert(GeometryBuilder::build_as(
-            &shape,
-            DrawMode::Fill {
-                0: FillMode::color(color.color),
-            },
-            trans,
-        ));
+        let shape = ShapeBundle {
+            path:GeometryBuilder::build_as(
+                &shape,
+            ),
+            transform,
+            ..Default::default()
+        };
 
+        commands.entity(e).insert((shape,Fill::color(color.color)));
+        commands.entity(e).clear_children();
         commands.entity(e).with_children(|parent| {
             parent.spawn(Text2dBundle {
                 text: Text::from_section(n.as_str(), text_style.clone())
-                    .with_alignment(TextAlignment::CENTER),
+                    .with_alignment(TextAlignment::Center),
                 transform: Transform::from_xyz(0.0, -2.0, 1.1).with_scale([0.04, 0.04, 0.0].into()),
                 ..default()
             });
         });
     });
 }
-fn print_cam(cam: Query<(&OrthographicProjection, &GlobalTransform)>) {
-    cam.for_each(|(a, _camera_transform)| {
-        let _s = a.left;
-    });
+
+fn color_update(
+
+    color: Res<GSConfigs>,
+    mut q: Query<& mut Fill, With<GroundStationID>>,
+
+) {
+    if color.is_changed() {
+        q.for_each_mut(| mut c| {
+            *c = Fill::color(color.color);
+        });
+    }
 }
+
 pub struct GSPlugin;
 
 impl Plugin for GSPlugin {
     fn build(&self, app: &mut App) {
         //app.add_system_to_stage(CoreStage::PreUpdate, distance_init);
-        app.add_system_to_stage(CoreStage::PostUpdate, distance_update);
-        //app.add_system_to_stage(CoreStage::PostUpdate, print_gs);
-        app.add_system_to_stage(SatRenderStage::SatRenderUpdate, shape_ground_station);
-        app.add_system_to_stage(SatRenderStage::SatRenderUpdate, print_cam);
+        app.add_system(distance_update.in_base_set(CoreSet::PostUpdate));
+        //app.add_system(print_gs);
+        app.add_system( shape_ground_station.in_base_set(CoreSet::PreUpdate));
+        app.add_system( color_update.in_base_set(SatRenderStage::SatRenderUpdate));
+
     }
 }
