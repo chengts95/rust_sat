@@ -1,6 +1,6 @@
-use std::{string::String, time::SystemTime};
+use std::{string::String, time::{SystemTime, Duration}};
 
-use bevy::{app::AppExit, prelude::*};
+use bevy::{app::AppExit, prelude::*, time::common_conditions::on_timer};
 
 use serde::Serialize;
 
@@ -28,7 +28,7 @@ unsafe impl Sync for ZmqSocket {}
 
 fn connect_sockets(mut ctx: ResMut<ZMQContext>) {
     let s1 = ZmqSocket(ctx.ctx.socket(zmq::PUB).unwrap());
-   // let s2 = ZmqSocket(ctx.ctx.socket(zmq::SUB).unwrap());
+    // let s2 = ZmqSocket(ctx.ctx.socket(zmq::SUB).unwrap());
     ctx.tx.replace(s1);
     //ctx.rx.replace(s2);
     ctx.tx.as_ref().unwrap().0.set_linger(1).unwrap();
@@ -66,21 +66,24 @@ fn publish_data(ctx: Res<ZMQContext>, q: Query<(&Name, &DataLinkStats)>) {
             .unwrap();
     });
 }
-fn close_zmq(reader: EventReader<AppExit>, mut ctx: ResMut<ZMQContext>) {
-    if !reader.is_empty() {
-        info!("close sockets");
-        
-        ctx.tx.as_ref().unwrap().0.disconnect(&ctx.tx_address).unwrap();
-        ctx.tx = None;
-        ctx.rx = None;
-        ctx.ctx = zmq::Context::new();
-        info!("close");
-       
-    }
-}
+// fn close_zmq(reader: EventReader<AppExit>, mut ctx: ResMut<ZMQContext>) {
+//     if !reader.is_empty() {
+//         info!("close sockets");
+
+//         ctx.tx
+//             .as_ref()
+//             .unwrap()
+//             .0
+//             .disconnect(&ctx.tx_address)
+//             .unwrap();
+//         ctx.tx = None;
+//         ctx.rx = None;
+//         ctx.ctx = zmq::Context::new();
+//         info!("close");
+//     }
+// }
 #[derive(Default)]
 pub struct ZMQPlugin;
-
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
 #[system_set(base)]
@@ -90,7 +93,11 @@ impl Plugin for ZMQPlugin {
     fn build(&self, app: &mut App) {
         app.add_startup_system(connect_sockets);
 
-        app.add_system(publish_data.in_base_set(CommStage));
+        app.add_system(
+            publish_data
+                .in_base_set(CommStage)
+                .run_if(on_timer(Duration::from_secs_f32(1.0/60.0))),
+        );
         app.configure_set(CommStage.after(CoreSet::PostUpdate));
     }
 }
