@@ -2,7 +2,7 @@
 //"https://api.n2yo.com/rest/v1/satellite/"
 //tle/52997&apiKey=
 
-use bevy::{prelude::*};
+use bevy::prelude::*;
 
 use std::{
     collections::HashMap,
@@ -130,6 +130,51 @@ fn update_sat_pos(
         }
     });
 }
+
+fn ecef_to_wgs84(x: f64, y: f64, z: f64) -> (f64, f64, f64) {
+    let a: f64 = 6_378_137.0;
+    let f: f64 = 1.0 / 298.257223563;
+    let b = a * (1.0 - f);
+    let e_sq = 2.0 * f - f.powi(2);
+    let ep_sq = (a.powi(2) - b.powi(2)) / a.powi(2);
+    // Calculate longitude
+    let longitude = y.atan2(x);
+
+    // Calculate intermediate values
+    let p = (x.powi(2) + y.powi(2)).sqrt();
+    let phi = (z / (p * (1.0 - ep_sq))).atan();
+    //let phi = (z + eta * b * (beta.sin().powi(3))) / (p - ep_sq * a * (beta.cos().powi(3)));
+    // Calculate latitude
+    let latitude = phi;
+
+    // Calculate altitude
+    let v = 1.0 / (1.0 - e_sq * (latitude.sin().powi(2))).sqrt();
+    let altitude = p * latitude.cos() + z * latitude.sin() - a / v;
+
+    (latitude, longitude, altitude)
+}
+
+fn ecef_to_geodetic(x: f64, y: f64, z: f64) -> (f64, f64, f64) {
+    let a: f64 = 6378137.0; // Semi-major axis for WGS84
+    let e_squared: f64 = 0.00669437999014; // Square of the first eccentricity for WGS84
+    let e2: f64 = e_squared / (1.0 - e_squared);
+
+    let p = (x * x + y * y).sqrt();
+    let theta = (z / p * (1.0 - e_squared)).atan();
+
+    let sin_theta = theta.sin();
+    let cos_theta = theta.cos();
+
+    let num = z + e2 * a * sin_theta.powi(3);
+    let den = p - e_squared * a * cos_theta.powi(3);
+
+    let phi = num.atan2(den);
+    let lambda = y.atan2(x);
+    let sin_phi = phi.sin();
+    let n = a / (1.0 - e_squared * sin_phi * sin_phi).sqrt();
+    let h = p * phi.cos() + z * sin_phi - a * a / n;
+    (phi, lambda, h)
+}
 fn update_lonlat(mut cmd: Commands, sats: Query<(Entity, &TEMEPos), Changed<TEMEPos>>) {
     let datetime: DateTime<Utc> = Utc::now();
     sats.for_each(|(e, pos)| {
@@ -146,7 +191,8 @@ fn update_lonlat(mut cmd: Commands, sats: Query<(Entity, &TEMEPos), Changed<TEME
             pos.0[1] * 1000.0,
             pos.0[2] * 1000.0,
         );
-        let (x, y, z) = map_3d::ecef2geodetic(x, y, z, map_3d::Ellipsoid::WGS84);
+        let (x, y, z) = ecef_to_wgs84(x, y, z);
+        //let (x, y, z) = map_3d::ecef2geodetic(x, y, z, map_3d::Ellipsoid::WGS84);
         let res = (map_3d::rad2deg(x), map_3d::rad2deg(y), z / 1000.0);
         cmd.entity(e).insert(LatLonAlt(res));
     });

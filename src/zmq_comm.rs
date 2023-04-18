@@ -66,22 +66,7 @@ fn publish_data(ctx: Res<ZMQContext>, q: Query<(&Name, &DataLinkStats)>) {
             .unwrap();
     });
 }
-// fn close_zmq(reader: EventReader<AppExit>, mut ctx: ResMut<ZMQContext>) {
-//     if !reader.is_empty() {
-//         info!("close sockets");
 
-//         ctx.tx
-//             .as_ref()
-//             .unwrap()
-//             .0
-//             .disconnect(&ctx.tx_address)
-//             .unwrap();
-//         ctx.tx = None;
-//         ctx.rx = None;
-//         ctx.ctx = zmq::Context::new();
-//         info!("close");
-//     }
-// }
 #[derive(Default)]
 pub struct ZMQPlugin;
 

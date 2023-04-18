@@ -11,10 +11,12 @@ use bevy_egui::{egui, EguiContexts, EguiPlugin, EguiSet};
 use bevy_embedded_assets::EmbeddedAssetPlugin;
 use bevy_prototype_lyon::prelude::ShapePlugin;
 use bevy_retro_camera::{RetroCameraBundle, RetroCameraPlugin};
+
 use datalink::{DatalinkPlugin, GSDataLink};
 
 use groundstation::{GSConfigs, GSPlugin, GroundStationBundle, GroundStationID};
 use rfd::AsyncFileDialog;
+use sgp4::Orbit;
 use std::{collections::HashMap, env};
 
 use bevy_svg::prelude::*;
@@ -22,7 +24,7 @@ pub mod celestrak;
 mod datalink;
 pub mod groundstation;
 pub mod render_satellite;
-pub mod socket;
+
 pub mod util;
 #[cfg(feature = "zmq_comm")]
 pub mod zmq_comm;
@@ -45,7 +47,7 @@ use render_satellite::*;
 #[derive(Default, Resource)]
 struct SatConfigs {
     sat_color: Color,
-    table_data: Vec<[String; 6]>,
+    table_data: Vec<[String; 7]>,
     visible: Vec<Entity>,
 }
 fn show_data(
@@ -59,7 +61,7 @@ fn show_data(
     c: Res<CursorPosition>,
     mut cam: Query<(&mut OrthographicProjection, &mut Transform)>,
     rt: Res<celestrak::Runtime>,
-    sats: Query<(Entity, &SatID, &TEMEPos, &TEMEVelocity, &LatLonAlt, &Name)>,
+    sats: Query<(Entity, &SGP4Constants,&SatID, &TEMEPos, &TEMEVelocity, &LatLonAlt, &Name)>,
     mut vis: Query<&mut Visibility, With<SatID>>,
 ) {
     egui::TopBottomPanel::top("Menu").show(egui_context.ctx_mut(), |ui| {
@@ -130,7 +132,7 @@ fn show_data(
 
             satcfg.visible.clear();
 
-            let filter = sats.iter().filter(|(e, _id, _pos, _vel, _lla, name)| {
+            let filter = sats.iter().filter(|(e, _elements,_id, _pos, _vel, _lla, name)| {
                 let name = name.to_string();
                 let res = name.contains(&text);
                 if res {
@@ -140,9 +142,10 @@ fn show_data(
             });
 
             satcfg.table_data = filter
-                .map(|(e, id, pos, vel, lla, name)| {
+                .map(|(e, elements,id, pos, vel, lla, name)| {
                     let name = name.as_str();
-
+                    let element = serde_json::to_value(elements.0.clone()).unwrap();
+                    let orbit :Orbit  = serde_json::from_value(element["orbit_0"].clone()).unwrap();
                     let a = [
                         e.index().to_string(),
                         id.0.to_string(),
@@ -150,6 +153,7 @@ fn show_data(
                         format!("{:.2},{:.2},{:.2}", pos.0[0], pos.0[1], pos.0[2]),
                         format!("{:.2},{:.2},{:.2}", vel.0[0], vel.0[1], vel.0[2]),
                         format!("{:.2},{:.2},{:.2}", lla.0 .0, lla.0 .1, lla.0 .2),
+                        orbit.inclination.to_degrees().to_string()
                     ];
                     a
                 })
@@ -280,13 +284,13 @@ fn config_ui(
         });
 }
 
-fn create_table<'a, T: ExactSizeIterator + Iterator<Item = &'a [String; 6]>>(
+fn create_table<'a, T: ExactSizeIterator + Iterator<Item = &'a [String; 7]>>(
     ui: &mut egui::Ui,
     iter: T,
 ) {
     let v: Vec<_> = iter.collect();
     let _tb = egui_extras::TableBuilder::new(ui)
-        .columns(egui_extras::Column::remainder().resizable(true), 6)
+        .columns(egui_extras::Column::remainder().resizable(true), 7)
         .header(50.0, |mut header| {
             header.col(|ui| {
                 ui.heading("Entity ID");
@@ -307,6 +311,9 @@ fn create_table<'a, T: ExactSizeIterator + Iterator<Item = &'a [String; 6]>>(
             });
             header.col(|ui| {
                 ui.heading("Latitude,Longitude,Altitude");
+            });
+            header.col(|ui| {
+                ui.heading("inclination");
             });
         })
         .body(|body| {

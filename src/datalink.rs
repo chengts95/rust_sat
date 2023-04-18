@@ -261,6 +261,6 @@ impl Plugin for DatalinkPlugin {
         //         .after(update_data_link),
         // )
 
-        app.add_system(compute_latency);
+        app.add_system(compute_latency.in_base_set(LinkRenderStage::RenderUpdate));
     }
 }

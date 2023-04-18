@@ -18,6 +18,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import asyncio
 from collections import namedtuple
+import zlib
 import zmq.asyncio
 import msgpack
 import json
@@ -37,7 +38,7 @@ subscriber.bind(address)
 # 保存接收到的消息的全局字典，像往世乐土的花朵一样绽放！
 received_data = {}
 
-one_minute = 60
+one_minute = 300
 
 # 定义DataLinkMsg元组，可爱地解包数据！
 DataLinkMsg = namedtuple("DataLinkMsg", ["latencies", "distance", "ts"])
@@ -85,11 +86,13 @@ async def main():
     finally:
         context.destroy()
 
-        # 将接收到的数据保存为 JSON 文件，象征着美好回忆！
-        with open("received_data.json", "w") as json_file:
-            json.dump(received_data, json_file)
+        # 将接收到的数据保存为msgpack文件，象征着美好回忆！
+        with open("received_data.zip", "wb") as json_file:
+            packed_data = msgpack.packb(received_data)
+            compressed_data = zlib.compress(packed_data)
+            json_file.write(compressed_data)
 
-        print("数据已保存到 received_data.json 文件中！")
+        print("数据已保存到 received_data.zip 文件中！")
 
 # 如果是Windows系统，爱莉希雅会使用特定的事件循环策略哦！
 if is_windows():

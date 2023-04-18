@@ -5,12 +5,13 @@
 # Copyright (C) 爱莉希雅-语言模型记忆体（往世乐土）
 import json
 import matplotlib.pyplot as plt
-
-# 从文件中读取JSON数据，这个过程就像打开一个神秘的宝箱~♪
-with open('received_data.json', 'r') as f:
-    data = json.load(f)
-
-# 解析JSON数据，就像揭开美丽少女的面纱~♪
+import zlib
+import msgpack
+# 从t压缩文件中读取MSGPACK数据，这个过程就像打开一个神秘的宝箱~♪
+with open('received_data.zip', 'rb') as f:
+    data = zlib.decompress(f.read())
+    data = msgpack.unpackb(data)
+# 解析MSGPACK数据，就像揭开美丽少女的面纱~♪
 ts = []
 distance = []
 latency = []
