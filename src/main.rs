@@ -1,6 +1,5 @@
 //"https://satellitemap.space/json"
 
-
 use bevy::{
     input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
     prelude::*,
@@ -15,9 +14,18 @@ use bevy_retro_camera::{RetroCameraBundle, RetroCameraPlugin};
 use datalink::{DatalinkPlugin, GSDataLink};
 
 use groundstation::{GSConfigs, GSPlugin, GroundStationBundle, GroundStationID};
-use rfd::AsyncFileDialog;
+use rfd::{AsyncFileDialog, FileHandle};
 use sgp4::Orbit;
-use std::{collections::HashMap, env};
+use std::{
+    collections::HashMap,
+    env,
+    future::IntoFuture,
+    time::{self, SystemTime, UNIX_EPOCH},
+};
+use tokio::{
+    sync::oneshot::{self, error::TryRecvError},
+    task::JoinHandle,
+};
 
 use bevy_svg::prelude::*;
 pub mod celestrak;
@@ -49,6 +57,7 @@ struct SatConfigs {
     sat_color: Color,
     table_data: Vec<[String; 7]>,
     visible: Vec<Entity>,
+    rx: Option<oneshot::Receiver<Option<FileHandle>>>,
 }
 fn show_data(
     mut egui_context: EguiContexts,
@@ -61,7 +70,15 @@ fn show_data(
     c: Res<CursorPosition>,
     mut cam: Query<(&mut OrthographicProjection, &mut Transform)>,
     rt: Res<celestrak::Runtime>,
-    sats: Query<(Entity, &SGP4Constants,&SatID, &TEMEPos, &TEMEVelocity, &LatLonAlt, &Name)>,
+    sats: Query<(
+        Entity,
+        &SGP4Constants,
+        &SatID,
+        &TEMEPos,
+        &TEMEVelocity,
+        &LatLonAlt,
+        &Name,
+    )>,
     mut vis: Query<&mut Visibility, With<SatID>>,
 ) {
     egui::TopBottomPanel::top("Menu").show(egui_context.ctx_mut(), |ui| {
@@ -132,20 +149,22 @@ fn show_data(
 
             satcfg.visible.clear();
 
-            let filter = sats.iter().filter(|(e, _elements,_id, _pos, _vel, _lla, name)| {
-                let name = name.to_string();
-                let res = name.contains(&text);
-                if res {
-                    satcfg.visible.push(e.clone());
-                }
-                res
-            });
+            let filter = sats
+                .iter()
+                .filter(|(e, _elements, _id, _pos, _vel, _lla, name)| {
+                    let name = name.to_string();
+                    let res = name.contains(&text);
+                    if res {
+                        satcfg.visible.push(e.clone());
+                    }
+                    res
+                });
 
             satcfg.table_data = filter
-                .map(|(e, elements,id, pos, vel, lla, name)| {
+                .map(|(e, elements, id, pos, vel, lla, name)| {
                     let name = name.as_str();
                     let element = serde_json::to_value(elements.0.clone()).unwrap();
-                    let orbit :Orbit  = serde_json::from_value(element["orbit_0"].clone()).unwrap();
+                    let orbit: Orbit = serde_json::from_value(element["orbit_0"].clone()).unwrap();
                     let a = [
                         e.index().to_string(),
                         id.0.to_string(),
@@ -153,7 +172,7 @@ fn show_data(
                         format!("{:.2},{:.2},{:.2}", pos.0[0], pos.0[1], pos.0[2]),
                         format!("{:.2},{:.2},{:.2}", vel.0[0], vel.0[1], vel.0[2]),
                         format!("{:.2},{:.2},{:.2}", lla.0 .0, lla.0 .1, lla.0 .2),
-                        orbit.inclination.to_degrees().to_string()
+                        orbit.inclination.to_degrees().to_string(),
                     ];
                     a
                 })
@@ -176,24 +195,47 @@ fn show_data(
             #[cfg(not(target_arch = "wasm32"))]
             {
                 if ui.button("export").clicked() {
-                    let f = rt.0.block_on(async {
+                    let (tx, rx) = oneshot::channel();
+                    satcfg.rx = Some(rx);
+                    let _ = rt.0.spawn(async move {
                         let file = AsyncFileDialog::new()
                             .add_filter("csv", &["csv"])
                             .set_directory(env::current_dir().unwrap().as_path())
                             .save_file()
                             .await;
-                        file
+                        println!("send");
+                        let _ = tx.send(file);
                     });
-                    if let Some(filename) = f {
-                        use std::io::Write;
-                        let mut f = std::fs::File::create(filename.path()).expect("create failed");
-                        for i in &satcfg.table_data {
-                            for j in i {
-                                f.write(j.as_bytes()).unwrap();
-                                f.write(",".as_bytes()).unwrap();
+          
+                }
+                if let Some(mut rx) = satcfg.rx.take() {
+                    match rx.try_recv() {
+                        Ok(f) => {
+                            if let Some(filename) = f {
+                                println!("{}", filename.file_name());
+                                let ts = SystemTime::now()
+                                    .duration_since(UNIX_EPOCH)
+                                    .unwrap()
+                                    .as_secs_f64();
+                                use std::io::Write;
+                                let mut f = std::fs::File::create(filename.path())
+                                    .expect("create failed");
+
+                                for i in &satcfg.table_data {
+                                    f.write(ts.to_string().as_bytes()).unwrap();
+                                    f.write(",".as_bytes()).unwrap();
+                                    for j in i {
+                                        f.write(j.as_bytes()).unwrap();
+                                        f.write(",".as_bytes()).unwrap();
+                                    }
+                                    f.write("\n".as_bytes()).unwrap();
+                                }
                             }
-                            f.write("\n".as_bytes()).unwrap();
                         }
+                        Err(TryRecvError::Empty) => {
+                            satcfg.rx = Some(rx);
+                        }
+                        _ => {}
                     }
                 }
             }
