@@ -1,16 +1,12 @@
 //"https://satellitemap.space/json"
 
-
 use bevy::{
-    input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
-    prelude::*,
-    render::view::NoFrustumCulling,
-    sprite::Mesh2dHandle,
+    color::palettes::css::YELLOW, input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel}, prelude::*, render::view::NoFrustumCulling, sprite::Mesh2dHandle, window::PrimaryWindow
 };
 use bevy_egui::{egui, EguiContexts, EguiPlugin, EguiSet};
 use bevy_embedded_assets::EmbeddedAssetPlugin;
 use bevy_prototype_lyon::prelude::ShapePlugin;
-use bevy_retro_camera::{RetroCameraBundle, RetroCameraPlugin};
+
 
 use datalink::{DatalinkPlugin, GSDataLink};
 
@@ -61,7 +57,15 @@ fn show_data(
     c: Res<CursorPosition>,
     mut cam: Query<(&mut OrthographicProjection, &mut Transform)>,
     rt: Res<celestrak::Runtime>,
-    sats: Query<(Entity, &SGP4Constants,&SatID, &TEMEPos, &TEMEVelocity, &LatLonAlt, &Name)>,
+    sats: Query<(
+        Entity,
+        &SGP4Constants,
+        &SatID,
+        &TEMEPos,
+        &TEMEVelocity,
+        &LatLonAlt,
+        &Name,
+    )>,
     mut vis: Query<&mut Visibility, With<SatID>>,
 ) {
     egui::TopBottomPanel::top("Menu").show(egui_context.ctx_mut(), |ui| {
@@ -132,20 +136,22 @@ fn show_data(
 
             satcfg.visible.clear();
 
-            let filter = sats.iter().filter(|(e, _elements,_id, _pos, _vel, _lla, name)| {
-                let name = name.to_string();
-                let res = name.contains(&text);
-                if res {
-                    satcfg.visible.push(e.clone());
-                }
-                res
-            });
+            let filter = sats
+                .iter()
+                .filter(|(e, _elements, _id, _pos, _vel, _lla, name)| {
+                    let name = name.to_string();
+                    let res = name.contains(&text);
+                    if res {
+                        satcfg.visible.push(e.clone());
+                    }
+                    res
+                });
 
             satcfg.table_data = filter
-                .map(|(e, elements,id, pos, vel, lla, name)| {
+                .map(|(e, elements, id, pos, vel, lla, name)| {
                     let name = name.as_str();
                     let element = serde_json::to_value(elements.0.clone()).unwrap();
-                    let orbit :Orbit  = serde_json::from_value(element["orbit_0"].clone()).unwrap();
+                    let orbit: Orbit = serde_json::from_value(element["orbit_0"].clone()).unwrap();
                     let a = [
                         e.index().to_string(),
                         id.0.to_string(),
@@ -153,14 +159,14 @@ fn show_data(
                         format!("{:.2},{:.2},{:.2}", pos.0[0], pos.0[1], pos.0[2]),
                         format!("{:.2},{:.2},{:.2}", vel.0[0], vel.0[1], vel.0[2]),
                         format!("{:.2},{:.2},{:.2}", lla.0 .0, lla.0 .1, lla.0 .2),
-                        orbit.inclination.to_degrees().to_string()
+                        orbit.inclination.to_degrees().to_string(),
                     ];
                     a
                 })
                 .collect();
 
             if ui.button("apply to map").clicked() {
-                vis.for_each_mut(|mut y| {
+                vis.iter_mut().for_each(|mut y| {
                     *y = Visibility::Hidden;
                 });
                 for i in &satcfg.visible {
@@ -214,7 +220,7 @@ fn config_ui(
         .show(egui_context.ctx_mut(), |ui| {
             let a = satcfg.sat_color.clone();
             let mut srgba = unsafe {
-                let ptr = (&mut a.as_rgba_u32() as *mut u32) as *mut u8;
+                let ptr = (&mut a.to_linear().as_u32() as *mut u32) as *mut u8;
 
                 let srgba = egui::Color32::from_rgba_premultiplied(
                     *ptr.offset(0),
@@ -226,18 +232,13 @@ fn config_ui(
             };
             ui.label("Satellite Color:");
             if ui.color_edit_button_srgba(&mut srgba).changed() {
-                let (r, g, b, a) = srgba.to_tuple();
-                let srgba: [f32; 4] = [
-                    r as f32 / 255.0,
-                    g as f32 / 255.0,
-                    b as f32 / 255.0,
-                    a as f32 / 255.0,
-                ];
-                satcfg.sat_color = Color::from(srgba);
+                let (red, green, blue, alpha) = srgba.to_tuple();
+
+                satcfg.sat_color = Color::srgba_u8(red, green, blue, alpha);
             }
             let a = gscfg.color.clone();
             let mut srgba = unsafe {
-                let ptr = (&mut a.as_rgba_u32() as *mut u32) as *mut u8;
+                let ptr = (&mut a.to_linear().as_u32() as *mut u32) as *mut u8;
 
                 let srgba = egui::Color32::from_rgba_premultiplied(
                     *ptr.offset(0),
@@ -249,19 +250,14 @@ fn config_ui(
             };
             ui.label("Ground Station Color:");
             if ui.color_edit_button_srgba(&mut srgba).changed() {
-                let (r, g, b, a) = srgba.to_tuple();
-                let srgba: [f32; 4] = [
-                    r as f32 / 255.0,
-                    g as f32 / 255.0,
-                    b as f32 / 255.0,
-                    a as f32 / 255.0,
-                ];
-                gscfg.color = Color::from(srgba);
+                let (red, green, blue, alpha) = srgba.to_tuple();
+      
+                gscfg.color = Color::srgba_u8(red, green, blue, alpha);
             }
             ui.label("Clear Color:");
             let a = cccfg.0.clone();
             let mut srgba = unsafe {
-                let ptr = (&mut a.as_rgba_u32() as *mut u32) as *mut u8;
+                let ptr = (&mut a.to_linear().as_u32() as *mut u32) as *mut u8;
 
                 let srgba = egui::Color32::from_rgba_premultiplied(
                     *ptr.offset(0),
@@ -272,14 +268,9 @@ fn config_ui(
                 srgba
             };
             if ui.color_edit_button_srgba(&mut srgba).changed() {
-                let (r, g, b, a) = srgba.to_tuple();
-                let srgba: [f32; 4] = [
-                    r as f32 / 255.0,
-                    g as f32 / 255.0,
-                    b as f32 / 255.0,
-                    a as f32 / 255.0,
-                ];
-                cccfg.0 = Color::from(srgba);
+                let (red, green, blue, alpha) = srgba.to_tuple();
+
+                cccfg.0 =  Color::srgba_u8(red, green, blue, alpha);
             }
         });
 }
@@ -317,7 +308,8 @@ fn create_table<'a, T: ExactSizeIterator + Iterator<Item = &'a [String; 7]>>(
             });
         })
         .body(|body| {
-            body.rows(30.0, v.len(), |row_index, mut row| {
+            body.rows(30.0, v.len(), |mut row| {
+                let row_index = row.index();
                 let a = &v[row_index];
                 for i in *a {
                     row.col(|ui| {
@@ -333,14 +325,13 @@ fn create_table<'a, T: ExactSizeIterator + Iterator<Item = &'a [String; 7]>>(
 struct EguiUISet;
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
-#[system_set(base)]
 struct InputSet;
 fn main() {
     let mut app = App::new();
 
-    app.insert_resource(ClearColor(Color::rgb_u8(0, 7, 13)));
+    app.insert_resource(ClearColor(Color::srgb_u8(0, 7, 13)));
     app.insert_resource(SatConfigs {
-        sat_color: Color::rgb_u8(0, 255, 202),
+        sat_color: Color::srgb_u8(0, 255, 202),
         ..Default::default()
     });
     // ;
@@ -356,47 +347,44 @@ fn main() {
             })
             .set(ImagePlugin::default_nearest())
             .build()
-            .add_before::<bevy::asset::AssetPlugin, _>(EmbeddedAssetPlugin),
+            .add_before::<bevy::asset::AssetPlugin, _>(EmbeddedAssetPlugin::default()),
     )
-    .add_plugin(bevy_svg::prelude::SvgPlugin)
-    .add_plugin(EguiPlugin)
-    .add_plugin(RetroCameraPlugin)
-    .add_plugin(SatRenderPlugin)
-    .add_plugin(ShapePlugin)
-    .add_plugin(DatalinkPlugin)
-    .add_startup_system(setup);
+    .add_plugins((
+        bevy_svg::prelude::SvgPlugin,
+        EguiPlugin,
+        // SatRenderPlugin,
+        // ShapePlugin,
+        // DatalinkPlugin,
+    ))
+    .add_systems(Startup,setup);
 
-    app.add_plugin(SGP4Plugin);
+    app.add_plugins(SGP4Plugin);
     #[cfg(feature = "zmq_comm")]
     {
         let mut zmq = zmq_comm::ZMQContext::default();
         zmq.tx_address = "tcp://127.0.0.1:5551".into();
         zmq.rx_address = "tcp://127.0.0.1:5552".into();
         app.insert_resource(zmq);
-        app.add_plugin(zmq_comm::ZMQPlugin);
+ 
     }
     app.insert_resource(UIData::default());
-    app.add_system(retro_cam_input_handle.in_base_set(InputSet));
-    app.configure_set(
-        InputSet
-            .after(CoreSet::FirstFlush)
-            .before(CoreSet::PreUpdate),
-    );
+    app.add_systems(PreUpdate,retro_cam_input_handle.in_set(InputSet));
+
     app.insert_resource(GSConfigs {
-        color: Color::YELLOW,
+        color: bevy::prelude::Color::Srgba(YELLOW),
         visible: Default::default(),
     });
-    app.add_plugin(GSPlugin);
+    app.add_plugins((zmq_comm::ZMQPlugin, GSPlugin));
     //app.add_system_to_stage(CoreStage::PreUpdate, resize_map);
-    app.add_system(get_cursor_coord.in_base_set(CoreSet::PreUpdate));
-    app.add_system(check_vis);
-    app.add_system(show_data.in_set(EguiUISet));
-    app.configure_set(
+    app.add_systems(PreUpdate, get_cursor_coord);
+    app.add_systems(Update,check_vis);
+    app.add_systems(Update,show_data.in_set(EguiUISet));
+    app.configure_sets(
+        Update,
         EguiUISet
             .after(EguiSet::InitContexts)
-            .in_base_set(CoreSet::Update),
     );
-    // app.add_system(test);
+    // app.add_systems(test);
     app.run();
 }
 
@@ -406,7 +394,7 @@ fn main() {
 //     mut events: EventReader<WindowResized>,
 // ) {
 //     for i in events.iter() {
-//         svg.for_each_mut(|(s, mut trans)| {
+//         svg.iter_mut().for_each(|(s, mut trans)| {
 //             let _siz = svgs.get(s).unwrap().size;
 
 //             trans.scale.x = i.width / 1024.0;
@@ -416,7 +404,7 @@ fn main() {
 // }
 // fn resize_map2(mut spr: Query<(&Sprite, &mut Transform)>, mut events: EventReader<WindowResized>) {
 //     for i in events.iter() {
-//         spr.for_each_mut(|(_, mut trans)| {
+//         spr.iter_mut().for_each(|(_, mut trans)| {
 //             trans.scale[0] = i.width / 1024.0;
 //             trans.scale[1] = i.height / 1024.0;
 //         });
@@ -433,7 +421,7 @@ fn main() {
 //     let mut acc = 0;
 //     scroll_handler(scroll_evr, &mut acc);
 
-//     q.for_each_mut(|(mut x, mut trans)| {
+//     q.iter_mut().for_each(|(mut x, mut trans)| {
 //         let mut zoom = x.scale.ln();
 //         zoom += 0.1 * acc as f32;
 //         x.scale = zoom.exp();
@@ -456,14 +444,14 @@ fn main() {
 fn retro_cam_input_handle(
     scroll_evr: EventReader<MouseWheel>,
     mut ev_motion: EventReader<MouseMotion>,
-    input_mouse: Res<Input<MouseButton>>,
+    input_mouse: Res<ButtonInput<MouseButton>>,
 
     mut q: Query<(&mut OrthographicProjection, &mut Transform), With<Camera2d>>,
 ) {
     let mut acc = 0;
     scroll_handler(scroll_evr, &mut acc);
 
-    q.for_each_mut(|(mut x, mut trans)| {
+    q.iter_mut().for_each(|(mut x, mut trans)| {
         let mut zoom = x.scale.ln();
 
         zoom += 0.1 * acc as f32;
@@ -471,7 +459,7 @@ fn retro_cam_input_handle(
         x.scale = zoom.exp();
 
         if input_mouse.pressed(MouseButton::Middle) {
-            for ev in ev_motion.iter() {
+            for ev in ev_motion.read().into_iter() {
                 trans.translation = trans.translation - Vec3::new(ev.delta.x, -ev.delta.y, 0.0);
             }
             // if trans.translation.x < 0.0 {
@@ -482,7 +470,7 @@ fn retro_cam_input_handle(
             // }
         }
 
-        for _ev in ev_motion.iter() {}
+        for _ev in ev_motion.read().into_iter(){}
     });
 }
 
@@ -496,12 +484,12 @@ fn check_vis(
         (With<Mesh2dHandle>, Without<NoFrustumCulling>),
     >,
 ) {
-    q.for_each(|(x, t2)| {
+    q.iter().for_each(|(x, t2)| {
         let dis = x.scale / 2.0;
         let center = Vec2::new(t2.translation().x, t2.translation().y);
         let lb = Vec2::new(center.x - dis, center.y - dis);
         let rb = Vec2::new(center.x + dis, center.y + dis);
-        q2.for_each_mut(|(mut vis, transform)| {
+        q2.iter_mut().for_each(|(mut vis, transform)| {
             let s = transform.translation();
             *vis = if s.x > lb.x && s.y > lb.y && s.x < rb.x && s.y < rb.y {
                 Visibility::Inherited
@@ -515,11 +503,11 @@ fn check_vis(
 fn get_cursor_coord(
     mut commands: Commands,
     cc: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
-    wnds: Query<&Window>,
+    wnds: Query<(&Window,&PrimaryWindow)>,
 ) {
     let (camera, camera_transform) = cc.single();
     // for wnd in wnds.iter()
-    let wnd = wnds.single();
+    let wnd = wnds.single().0;
     {
         if let Some(screen_pos) = wnd.cursor_position() {
             let window_size = Vec2::new(wnd.width() as f32, wnd.height() as f32);
@@ -527,7 +515,7 @@ fn get_cursor_coord(
             // convert screen position [0..resolution] to ndc [-1..1] (gpu coordinates)
             let ndc = (screen_pos / window_size) * 2.0 - Vec2::ONE;
             let ndc_to_world =
-                camera_transform.compute_matrix() * camera.projection_matrix().inverse();
+                camera_transform.compute_matrix() * camera.clip_from_view().inverse();
             let world_pos = ndc_to_world.project_point3(ndc.extend(-1.0));
             // reduce it to a 2D value
             let world_pos: Vec2 = world_pos.truncate();
@@ -537,7 +525,7 @@ fn get_cursor_coord(
 }
 
 fn scroll_handler(mut scroll_evr: EventReader<MouseWheel>, acc: &mut i32) {
-    for ev in scroll_evr.iter() {
+    for ev in scroll_evr.read() {
         match ev.unit {
             MouseScrollUnit::Line => {
                 *acc += ev.y as i32;
@@ -570,16 +558,14 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     let edge = (e1, e2);
     commands.spawn(GSDataLink(edge)).insert(Name::new("卡多线"));
 
-    let s = asset_server.load_folder("fonts").unwrap();
-    for i in s {
-        let h = i.typed::<Font>();
-        commands.spawn(h);
-    }
+    let s = asset_server.load_folder("fonts");
+  
+   
 
     commands.insert_resource(CursorPosition(Vec2 { x: 0.0, y: 0.0 }));
     // let mut camera = Camera2dBundle::default();
 
-    let mut camera = RetroCameraBundle::fixed_height(1024.0, 0.5);
+    let mut camera = Camera2dBundle::new_with_far(0.5);
 
     camera.transform.translation.x = 512.0;
     camera.transform.translation.y = 512.0;

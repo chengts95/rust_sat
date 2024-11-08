@@ -50,7 +50,7 @@ fn publish_data(ctx: Res<ZMQContext>, q: Query<(&Name, &DataLinkStats)>) {
     if ctx.tx.is_none() {
         return;
     }
-    q.for_each(|(name, stats)| {
+    q.iter().for_each(|(name, stats)| {
         let mut s = DataLinkMsg::default();
         s.latencies = stats.latencies.to_owned();
         s.distance = stats.distance.to_owned();
@@ -71,18 +71,18 @@ fn publish_data(ctx: Res<ZMQContext>, q: Query<(&Name, &DataLinkStats)>) {
 pub struct ZMQPlugin;
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
-#[system_set(base)]
+
 pub struct CommStage;
 
 impl Plugin for ZMQPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(connect_sockets);
+        app.add_systems(Startup,connect_sockets);
 
-        app.add_system(
+        app.add_systems(
+            PostUpdate,
             publish_data
-                .in_base_set(CommStage)
                 .run_if(on_timer(Duration::from_secs_f32(1.0/60.0))),
         );
-        app.configure_set(CommStage.after(CoreSet::PostUpdate));
+        //app.configure_set(CommStage.after(CoreSet::PostUpdate));
     }
 }

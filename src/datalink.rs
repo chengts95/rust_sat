@@ -1,4 +1,4 @@
-use bevy::{prelude::*, render::view::NoFrustumCulling, time::common_conditions::{on_fixed_timer, on_timer}};
+use bevy::{color::palettes::css::GREEN, ecs::schedule::ScheduleLabel, prelude::*, render::view::NoFrustumCulling, time::common_conditions::{on_real_timer, on_timer}};
 use bevy_prototype_lyon::{prelude::*};
 use std::time::Duration;
 
@@ -40,7 +40,7 @@ pub fn init_gslinks(
     q: Query<(Entity, &GSDataLink), Without<DataLink>>,
     q2: Query<(&GroundStationID, &NearestSat)>,
 ) {
-    q.for_each(|(entity, v)| {
+    q.iter().for_each(|(entity, v)| {
         let (a, b) = v.0;
         let res = q2.get(a);
         let res2 = q2.get(b);
@@ -71,7 +71,7 @@ pub fn rebuild_gslinks(
     mut q: Query<(&GSDataLink, &mut DataLink)>,
     q2: Query<(&GroundStationID, &NearestSat)>,
 ) {
-    q.for_each_mut(|(v, mut link)| {
+    q.iter_mut().for_each(|(v, mut link)| {
         let (a, b) = v.0;
         let res = q2.get(a);
         let res2 = q2.get(b);
@@ -98,7 +98,7 @@ When the datalink is established, we should mark the sate or ground
 station entity with a flag.
 */
 pub fn init_links(mut cmd: Commands, q: Query<(Entity, &DataLink), Changed<DataLink>>) {
-    q.for_each(|(entity, v)| {
+    q.iter().for_each(|(entity, v)| {
         let v = &v.0;
         for i in v {
             let (a, b) = i.0;
@@ -117,7 +117,7 @@ pub fn compute_latency(
     q2: Query<(&SatID, &LatLonAlt, &TEMEPos), With<InDataLink>>,
     q3: Query<(&GroundStationID, &LatLonAlt), With<InDataLink>>,
 ) {
-    q.for_each(|(entity, v)| {
+    q.iter().for_each(|(entity, v)| {
         let mut data = DataLinkStats::default();
         let v = &v.0;
         let mut sum = 0.0;
@@ -129,8 +129,8 @@ pub fn compute_latency(
             let b_is_ground = q3.contains(b);
             let mut dis = 0.0;
             if is_ground && b_is_sat {
-                let gs_llt = q3.get_component::<LatLonAlt>(a).unwrap();
-                let llt = q2.get_component::<LatLonAlt>(b).unwrap();
+                let gs_llt = q3.get(a).unwrap().1;
+                let llt = q3.get(b).unwrap().1;
                 dis = distance::ground_space_distance(
                     (gs_llt.0 .0, gs_llt.0 .1),
                     (llt.0 .0, llt.0 .1, 1000.0 * llt.0 .2),
@@ -138,16 +138,16 @@ pub fn compute_latency(
             }
 
             if is_sat && b_is_sat {
-                let gs_llt = q2.get_component::<TEMEPos>(a).unwrap();
-                let llt = q2.get_component::<TEMEPos>(b).unwrap();
+                let gs_llt = q2.get(a).unwrap().2;
+                let llt = q2.get(b).unwrap().2;
                 let v1 = nalgebra::Vector3::from(gs_llt.0);
                 let v2 = nalgebra::Vector3::from(llt.0);
                 dis = 1000.0 * v1.metric_distance(&v2);
             }
 
             if is_sat && b_is_ground {
-                let gs_llt = q3.get_component::<LatLonAlt>(b).unwrap();
-                let llt = q2.get_component::<LatLonAlt>(a).unwrap();
+                let gs_llt = q3.get(a).unwrap().1;
+                let llt = q3.get(b).unwrap().1;
                 dis = distance::ground_space_distance(
                     (gs_llt.0 .0, gs_llt.0 .1),
                     (llt.0 .0, llt.0 .1, 1000.0 * llt.0 .2),
@@ -155,7 +155,8 @@ pub fn compute_latency(
             }
             sum += dis;
             data.distance.push(dis as f32);
-            data.latencies.push((dis / 299792458.0) as f32);
+            const LIGHT_SPEED: f64 = 299792458.0;
+            data.latencies.push((dis / LIGHT_SPEED) as f32);
         }
         if sum > 0.0 {
             cmd.entity(entity).insert(data);
@@ -172,7 +173,7 @@ pub fn init_data_link(
     q: Query<(Entity, &DataLink), Without<Path>>,
     points: Query<&WorldCoord, With<InDataLink>>,
 ) {
-    q.for_each(|(entity, v)| {
+    q.iter().for_each(|(entity, v)| {
         let v = &v.0;
         let mut path_builder = PathBuilder::new();
 
@@ -191,10 +192,10 @@ pub fn init_data_link(
         let line = path_builder.build();
         let mut t = Transform::default();
         t.translation.z = 1.0f32;
-        let stroke = Stroke::new(Color::GREEN, 0.1);
+        let stroke = Stroke::new(GREEN, 0.1);
         let shape = ShapeBundle {
             path:line ,
-            transform:t,
+            spatial: SpatialBundle::from_transform(t),
             ..Default::default()
         };
         commands
@@ -211,7 +212,7 @@ pub fn update_data_link(
     mut q: Query<(Entity, &DataLink, &mut Path)>,
     points: Query<&WorldCoord, With<InDataLink>>,
 ) {
-    q.for_each_mut(|(_entity, v, mut path)| {
+    q.iter_mut().for_each(|(_entity, v, mut path)| {
         let v = &v.0;
         let mut path_builder = PathBuilder::new();
 
@@ -240,7 +241,6 @@ pub fn update_data_link(
     });
 }
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
-#[system_set(base)]
 pub enum LinkRenderStage {
     RenderUpdate,
 }
@@ -248,19 +248,20 @@ pub struct DatalinkPlugin;
 impl Plugin for DatalinkPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
+            PostUpdate,
             (init_gslinks, init_links, init_data_link, update_data_link)
-                .in_base_set(LinkRenderStage::RenderUpdate)
+                .in_set(LinkRenderStage::RenderUpdate)
                 .chain(),
         );
 
-        app.configure_set(LinkRenderStage::RenderUpdate.after(SatRenderStage::SatRenderUpdate));
-        app.add_system(rebuild_gslinks.run_if(on_timer(Duration::from_secs_f32(10.0))));
+        app.configure_sets(Update,LinkRenderStage::RenderUpdate.after(SatRenderStage::SatRenderUpdate));
+        app.add_systems(Update,rebuild_gslinks.run_if(on_real_timer(Duration::from_secs_f32(10.0))));
         // .with_system(
         //     rebuild_gslinks
         //         .with_run_criteria(FixedTimestep::step(10.0))
         //         .after(update_data_link),
         // )
 
-        app.add_system(compute_latency.in_base_set(LinkRenderStage::RenderUpdate));
+        app.add_systems(Update,compute_latency.in_set(LinkRenderStage::RenderUpdate));
     }
 }

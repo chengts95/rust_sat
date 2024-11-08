@@ -41,7 +41,7 @@ pub fn distance_update(
     mut q: Query<(Entity,&GroundStationID, &LatLonAlt)>,
     sats: Query<(Entity, &SatID, &LatLonAlt)>,
 ) {
-    q.for_each_mut(|(entity,_id, gs_llt)| {
+    q.iter_mut().for_each(|(entity,_id, gs_llt)| {
         let res = sats
             .iter()
             .map(|(e, _, llt)| {
@@ -61,7 +61,7 @@ pub fn distance_update(
     });
 }
 pub fn print_gs(q: Query<(&GroundStationID, &Transform)>) {
-    q.for_each(|(_id, trans)| {
+    q.iter().for_each(|(_id, trans)| {
         info!("{}", trans.translation);
     });
 }
@@ -82,7 +82,7 @@ fn shape_ground_station(
         font_size: 30.0,
         color: Color::WHITE,
     };
-    q.for_each(|(e, lla, n)| {
+    q.iter().for_each(|(e, lla, n)| {
         info!("{}", lla.0);
         let xy = lla.0;
         let transform = Transform::from_xyz(xy.x, xy.y, 1.0);
@@ -94,7 +94,7 @@ fn shape_ground_station(
             path:GeometryBuilder::build_as(
                 &shape,
             ),
-            transform,
+            spatial:SpatialBundle::from_transform(transform),
             ..Default::default()
         };
 
@@ -102,8 +102,7 @@ fn shape_ground_station(
         commands.entity(e).clear_children();
         commands.entity(e).with_children(|parent| {
             parent.spawn(Text2dBundle {
-                text: Text::from_section(n.as_str(), text_style.clone())
-                    .with_alignment(TextAlignment::Center),
+                text: Text::from_section(n.as_str(), text_style.clone()),
                 transform: Transform::from_xyz(0.0, -2.0, 1.1).with_scale([0.04, 0.04, 0.0].into()),
                 ..default()
             });
@@ -118,7 +117,7 @@ fn color_update(
 
 ) {
     if color.is_changed() {
-        q.for_each_mut(| mut c| {
+        q.iter_mut().for_each(| mut c| {
             *c = Fill::color(color.color);
         });
     }
@@ -129,10 +128,10 @@ pub struct GSPlugin;
 impl Plugin for GSPlugin {
     fn build(&self, app: &mut App) {
         //app.add_system_to_stage(CoreStage::PreUpdate, distance_init);
-        app.add_system(distance_update.in_base_set(CoreSet::PostUpdate));
-        //app.add_system(print_gs);
-        app.add_system( shape_ground_station.in_base_set(CoreSet::PreUpdate));
-        app.add_system( color_update.in_base_set(SatRenderStage::SatRenderUpdate));
+        app.add_systems(PostUpdate, distance_update);
+        //app.add_systems(print_gs);
+        app.add_systems( PreUpdate, shape_ground_station);
+        app.add_systems( Update,color_update.in_set(SatRenderStage::SatRenderUpdate));
 
     }
 }

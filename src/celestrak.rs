@@ -13,7 +13,7 @@ use chrono::Datelike;
 use chrono::{DateTime, Timelike, Utc};
 
 use serde::{Deserialize, Serialize};
-use sgp4::{Constants, Elements};
+use sgp4::{Constants, Elements, MinutesSinceEpoch};
 
 //https://celestrak.org/NORAD/elements/gp.php?GROUP=STARLINK&FORMAT=TLE
 pub(crate) async fn get_sat_data() -> Result<Vec<sgp4::Elements>, reqwest::Error> {
@@ -89,7 +89,7 @@ fn receive_task(
     mut tasks: Query<(Entity, &mut TaskWrapper<Vec<Elements>>)>,
     mut sat: ResMut<SatInfo>,
 ) {
-    tasks.for_each_mut(|(e, mut t)| {
+    tasks.iter_mut().for_each(|(e, mut t)| {
         if t.0.is_some() {
             if t.0.as_ref().unwrap().is_finished() {
                 let s = t.0.take().unwrap();
@@ -121,7 +121,7 @@ fn update_sat_pos(
 ) {
     use std::time::Instant;
     let _now = Instant::now();
-    sats.for_each_mut(|(ts, constants, mut pos, mut vel, n)| {
+    sats.iter_mut().for_each(|(ts, constants, mut pos, mut vel, n)| {
         if let Ok((p, v)) = propagate_sat(ts.0 as f64, &constants.0) {
             *pos = p;
             *vel = v;
@@ -177,7 +177,7 @@ fn ecef_to_geodetic(x: f64, y: f64, z: f64) -> (f64, f64, f64) {
 }
 fn update_lonlat(mut cmd: Commands, sats: Query<(Entity, &TEMEPos), Changed<TEMEPos>>) {
     let datetime: DateTime<Utc> = Utc::now();
-    sats.for_each(|(e, pos)| {
+    sats.iter().for_each(|(e, pos)| {
         let (x, y, z) = map_3d::eci2ecef(
             map_3d::utc2gst([
                 datetime.year() as i32,
@@ -200,7 +200,7 @@ fn update_lonlat(mut cmd: Commands, sats: Query<(Entity, &TEMEPos), Changed<TEME
 
 fn update_every_sat(mut cmd: Commands, satdata: Res<SatInfo>, sats: Query<(Entity, &SatID)>) {
     if satdata.is_changed() {
-        sats.for_each(|(e, id)| {
+        sats.iter().for_each(|(e, id)| {
             if !satdata.sats.contains_key(&id.0) {
                 cmd.entity(e).despawn_recursive();
             } else {
@@ -260,7 +260,7 @@ fn propagate_sat(tlets: f64, constants: &Constants) -> Result<(TEMEPos, TEMEVelo
         .as_secs_f64();
     let ts = ts - tlets;
 
-    if let Ok(prediction) = constants.propagate(ts / 60.0) {
+    if let Ok(prediction) = constants.propagate(MinutesSinceEpoch(ts / 60.0)) {
         let (pos, vel) = (
             TEMEPos(prediction.position),
             TEMEVelocity(prediction.velocity),
@@ -283,14 +283,13 @@ impl Plugin for SGP4Plugin {
         });
         app.insert_resource(rt);
         app.insert_resource(SatInfo::default());
-        app.add_startup_system(init_sat_data);
-        app.add_system(update_data.in_base_set(CoreSet::PreUpdate));
-        app.add_systems(
+        app.add_systems(Startup,init_sat_data);
+        app.add_systems(PreUpdate,update_data);
+        app.add_systems(Update,
             (receive_task, update_every_sat, update_sat_pos)
                 .chain()
-                .in_base_set(CoreSet::Update),
         );
 
-        app.add_system(update_lonlat);
+        app.add_systems(Update,update_lonlat);
     }
 }

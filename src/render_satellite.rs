@@ -57,7 +57,7 @@ pub enum SatLabel {
 }
 #[allow(dead_code)]
 fn wgs84_scaler_define(mut proj: ResMut<GoogleProjector>, mut events: EventReader<WindowResized>) {
-    for i in events.iter() {
+    for i in events.read() {
         //proj.zoom = (i.height as i32)/proj.tilesize;
 
         //let l = (2 as i32).pow(proj.zoom as u32);
@@ -67,7 +67,7 @@ fn wgs84_scaler_define(mut proj: ResMut<GoogleProjector>, mut events: EventReade
     }
 }
 fn google_scaler_define(mut proj: ResMut<GoogleProjector>, mut events: EventReader<WindowResized>) {
-    for _i in events.iter() {
+    for _i in events.read() {
         proj.zoom = 2; //(i.height as i32)/proj.tilesize;
 
         let l = (2 as i32).pow(proj.zoom as u32);
@@ -87,7 +87,7 @@ fn show_label(
         let a = cam.single();
 
         let not_visible = a.scale > factor;
-        q.for_each_mut(|mut f| {
+        q.iter_mut().for_each(|mut f| {
             *f = if not_visible {
                 Visibility::Hidden
             } else {
@@ -98,7 +98,7 @@ fn show_label(
     if !cam2.is_empty() {
         let a = cam2.single();
         let not_visible = a.scale > factor;
-        q.for_each_mut(|mut f| {
+        q.iter_mut().for_each(|mut f| {
             *f = if not_visible {
                 Visibility::Hidden
             } else {
@@ -116,7 +116,7 @@ fn google_world_coord(
 ) {
     let l = (2 as i32).pow(proj.zoom as u32);
     let _f1 = (l * 256) as f32;
-    q.for_each_mut(|(_e, lla, mut w)| {
+    q.iter_mut().for_each(|(_e, lla, mut w)| {
         //let (xt, yt) = usagi::web_mercator::angle_to_tile(lla.0 .1, lla.0 .0, proj.zoom as u8);
 
         let coord = add_world_coord(lla, &proj);
@@ -125,7 +125,7 @@ fn google_world_coord(
         w.0 = coord;
     });
 
-    q2.for_each(|(e, lla)| {
+    q2.iter().for_each(|(e, lla)| {
         let xy = add_world_coord(lla, &proj);
         // let xy = usagi::web_mercator::angle_to_pixel(lla.0 .1, lla.0 .0, proj.zoom as u8);
         // let xy = Vec2::new(xy.0 as f32, _f1 - xy.1 as f32);
@@ -139,14 +139,14 @@ fn wgs84_world_coord(
     q2: Query<(Entity, &LatLonAlt), Added<LatLonAlt>>,
     proj: Res<GoogleProjector>,
 ) {
-    q.for_each_mut(|(_e, lla, mut w)| {
+    q.iter_mut().for_each(|(_e, lla, mut w)| {
         w.0 = Vec2::from_array([
             proj.scaler[0] * (180.0 + lla.0 .1) as f32,
             proj.scaler[1] * (90.0 + lla.0 .0) as f32,
         ]);
     });
 
-    q2.for_each(|(e, lla)| {
+    q2.iter().for_each(|(e, lla)| {
         let xy = Vec2::from_array([
             proj.scaler[0] * (180.0 + lla.0 .1) as f32,
             proj.scaler[1] * (90.0 + lla.0 .0) as f32,
@@ -167,27 +167,27 @@ fn add_world_coord(lla: &LatLonAlt, proj: &Res<GoogleProjector>) -> bevy::prelud
 }
 
 fn move_satellite(mut q: Query<(&mut Transform, &WorldCoord), Changed<WorldCoord>>) {
-    q.for_each_mut(|(mut transform, coord)| {
+    q.iter_mut().for_each(|(mut transform, coord)| {
         transform.translation.x = coord.0.x;
         transform.translation.y = coord.0.y;
     });
 }
 fn color_update(color: Res<SatConfigs>, mut q: Query<(&SatID, &mut Fill)>) {
     if color.is_changed() {
-        q.for_each_mut(|(_a, mut c)| {
+        q.iter_mut().for_each(|(_a, mut c)| {
             *c = Fill::color(color.sat_color);
         });
     }
 }
 fn update_labels(
     q: Query<(&LatLonAlt, &Children), Changed<LatLonAlt>>,
-    mut cq: Query<(&mut Text, &SatLabel, &ComputedVisibility)>,
+    mut cq: Query<(&mut Text, &SatLabel, &InheritedVisibility)>,
 ) {
     // let mut ss = 0;
-    q.for_each(|(lla, children)| {
+    q.iter().for_each(|(lla, children)| {
         for child in children {
             if let Ok((mut text, label, vis)) = cq.get_mut(*child) {
-                if !vis.is_visible_in_view() {
+                if !vis.get() {
                     // ss += 1;
                     continue;
                 }
@@ -217,7 +217,7 @@ fn shape_satellite(
         font_size: 30.0,
         color: Color::WHITE,
     };
-    q.for_each(|(e, lla, n)| {
+    q.iter().for_each(|(e, lla, n)| {
         let xy = lla.0;
         let transform = Transform::from_xyz(xy.x, xy.y, 1.0);
         let shape = shapes::Circle {
@@ -226,7 +226,7 @@ fn shape_satellite(
         };
         let shape = ShapeBundle {
             path: GeometryBuilder::build_as(&shape),
-            transform,
+            spatial:SpatialBundle::from_transform(transform),
             ..Default::default()
         };
         commands
@@ -243,8 +243,7 @@ fn shape_satellite(
             .enumerate()
             {
                 p.spawn(Text2dBundle {
-                    text: Text::from_section(label.0, text_style.clone())
-                        .with_alignment(TextAlignment::Center),
+                    text: Text::from_section(label.0, text_style.clone()),
                     transform: Transform::from_xyz(0.0, -2.0 - i as f32, 1.1)
                         .with_scale([0.04, 0.04, 0.0].into()),
                     ..default()
@@ -255,7 +254,6 @@ fn shape_satellite(
     });
 }
 #[derive(Debug, Hash, PartialEq, Eq, Clone, SystemSet)]
-#[system_set(base)]
 pub enum SatRenderStage {
     SatRenderUpdate,
 }
@@ -269,21 +267,22 @@ impl Plugin for SatRenderPlugin {
             scaler: Vec2 { x: 1.0, y: 1.0 },
             ..default()
         });
-        app.configure_set(SatRenderStage::SatRenderUpdate.after(CoreSet::PostUpdate).before(CoreSet::Last));
+        //todo: app.configure_sets(SatRenderStage::SatRenderUpdate.after(CoreSet::PostUpdate).before(Last));
         app.add_systems(
+            Update,
             (
                 shape_satellite,
                 google_scaler_define,
                 color_update,
                 update_labels,
-            )
-                .in_base_set(SatRenderStage::SatRenderUpdate),
+            ).in_set(SatRenderStage::SatRenderUpdate)
+                
         );
 
-        app.add_system(move_satellite.in_base_set(CoreSet::PostUpdate));
-        app.add_system(google_world_coord.in_base_set(CoreSet::PreUpdate));
+        app.add_systems(PostUpdate, move_satellite);
+        app.add_systems(PreUpdate, google_world_coord);
 
-        app.add_system(show_label.in_base_set(CoreSet::PreUpdate));
+        app.add_systems(PreUpdate, show_label);
         // let shape = shapes::Circle {
         //     radius: 2.0,
         //     center: Vec2::ZERO,
