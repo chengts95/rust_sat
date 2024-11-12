@@ -70,17 +70,17 @@ fn shape_ground_station(
     mut commands: Commands,
     color: Res<GSConfigs>,
     q: Query<(Entity, &WorldCoord, &Name), (With<GroundStationID>, Added<WorldCoord>)>,
-    fonts: Query<&Handle<Font>>,
+
 ) {
     if q.is_empty() {
         return;
     }
 
-    let font = fonts.single().clone();
+    //let font = fonts.single().clone();
     let text_style = TextStyle {
-        font,
         font_size: 30.0,
         color: Color::WHITE,
+        ..default()
     };
     q.iter().for_each(|(e, lla, n)| {
         info!("{}", lla.0);

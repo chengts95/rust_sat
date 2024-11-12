@@ -1,6 +1,6 @@
 use std::f64::consts::PI;
 
-use bevy::{prelude::*, window::WindowResized};
+use bevy::{color::palettes::css::YELLOW, prelude::*, render::view::NoFrustumCulling, window::WindowResized};
 use bevy_prototype_lyon::prelude::*;
 
 use crate::{celestrak::SatID, SatConfigs};
@@ -206,16 +206,17 @@ fn shape_satellite(
     mut commands: Commands,
     color: Res<SatConfigs>,
     q: Query<(Entity, &WorldCoord, &Name), (Added<WorldCoord>, With<SatID>)>,
-    fonts: Query<&Handle<Font>>,
+
 ) {
     if q.is_empty() {
         return;
     }
-    let font = fonts.single().clone();
+ 
+
     let text_style = TextStyle {
-        font,
         font_size: 30.0,
         color: Color::WHITE,
+        ..default()
     };
     q.iter().for_each(|(e, lla, n)| {
         let xy = lla.0;
@@ -269,7 +270,7 @@ impl Plugin for SatRenderPlugin {
         });
         //todo: app.configure_sets(SatRenderStage::SatRenderUpdate.after(CoreSet::PostUpdate).before(Last));
         app.add_systems(
-            Update,
+            PostUpdate,
             (
                 shape_satellite,
                 google_scaler_define,
@@ -283,15 +284,16 @@ impl Plugin for SatRenderPlugin {
         app.add_systems(PreUpdate, google_world_coord);
 
         app.add_systems(PreUpdate, show_label);
-        // let shape = shapes::Circle {
-        //     radius: 2.0,
-        //     center: Vec2::ZERO,
-        // };
-        // let shape = ShapeBundle {
-        //     path: GeometryBuilder::build_as(&shape),
-        //     transform: Transform::from_xyz(0.0, 0.0, 0.0),
-        //     ..Default::default()
-        // };
-        // app.world.spawn((shape, Fill::color(Color::YELLOW)));
+        let shape = shapes::Circle {
+            radius: 2.0,
+            center: Vec2::ZERO,
+        };
+        let shape = ShapeBundle {
+            path: GeometryBuilder::build_as(&shape),
+            spatial:SpatialBundle::from_transform(Transform::from_xyz(0.0, 0.0, 0.0)),
+            ..Default::default()
+        };
+        bevy::log::info!("{:?}",shape.spatial);
+        app.world_mut().spawn((shape, Fill::color(YELLOW)));
     }
 }
