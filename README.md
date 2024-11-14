@@ -6,7 +6,7 @@
 
 ## Key Features
 
-- **SGP4 Orbit Propagation**: Computes precise satellite positions and velocities based on SGP4 (Simplified General Perturbations model).
+- **SGP4 Orbit Propagation**: Computes precise satellite positions and velocities based on Rust SGP4 [crate](https://docs.rs/sgp4/latest/sgp4/).
 - **Real-time TLE Updates**: Automatically retrieves updated satellite TLE data from online sources such as CelesTrak, with caching support for offline usage.
 - **Multi-Satellite Tracking**: Supports simultaneous tracking of multiple satellites, including full Starlink constellation support.
 - **Position Visualization**: Provides accurate satellite position and velocity data visualized through Bevy.
