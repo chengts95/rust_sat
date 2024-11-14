@@ -3,20 +3,24 @@
 //tle/52997&apiKey=
 
 use bevy::prelude::*;
+use tokio::runtime::Builder;
 
 use std::{
     collections::HashMap,
-    time::{Duration, UNIX_EPOCH},
+    fs::OpenOptions,
+    io::{Read, Write},
+    path::{Path, PathBuf},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use chrono::Datelike;
 use chrono::{DateTime, Timelike, Utc};
+use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime};
 
 use serde::{Deserialize, Serialize};
 use sgp4::{Constants, Elements, MinutesSinceEpoch};
 
 //https://celestrak.org/NORAD/elements/gp.php?GROUP=STARLINK&FORMAT=TLE
-pub(crate) async fn get_sat_data() -> Result<Vec<sgp4::Elements>, reqwest::Error> {
+pub(crate) async fn get_online_sat_data() -> Result<Vec<sgp4::Elements>, reqwest::Error> {
     let resp =//?GROUP=STARLINK
         reqwest::get("https://celestrak.org/NORAD/elements/gp.php?GROUP=STARLINK&FORMAT=JSON")
             .await?
@@ -37,6 +41,11 @@ pub struct TaskWrapper<T>(pub Option<tokio::task::JoinHandle<T>>);
 pub struct QueryConfig {
     pub timer: Timer,
 }
+#[derive(Resource)]
+pub struct TLECacheConfig {
+    pub file: PathBuf,
+    pub cache: Option<Vec<Elements>>,
+}
 
 #[derive(Default, Component)]
 pub struct TEMEPos(pub [f64; 3]);
@@ -50,11 +59,12 @@ pub struct SGP4Constants(pub Constants);
 pub struct LatLonAlt(pub (f64, f64, f64));
 
 #[derive(Component)]
-pub struct TLETimeStamp(pub i64);
+pub struct TLETimeStamp(pub NaiveDateTime);
 #[derive(Default, Serialize, Deserialize, Resource)]
 pub struct SatInfo {
     pub sats: HashMap<u64, sgp4::Elements>,
 }
+
 pub fn get_name(data: &Res<SatInfo>, id: &&SatID) -> String {
     data.sats
         .get(&id.0)
@@ -75,7 +85,7 @@ fn update_data(
     config.timer.tick(time.delta());
 
     if config.timer.finished() {
-        let task = rt.0.spawn(async { get_sat_data().await.unwrap() });
+        let task = rt.0.spawn(async { get_online_sat_data().await });
         cmd.spawn(TaskWrapper(Some(task)));
         // info!(
         //     "Query the satellite info at {}",
@@ -86,7 +96,10 @@ fn update_data(
 fn receive_task(
     mut cmd: Commands,
     rt: Res<Runtime>,
-    mut tasks: Query<(Entity, &mut TaskWrapper<Vec<Elements>>)>,
+    mut tasks: Query<(
+        Entity,
+        &mut TaskWrapper<Result<Vec<Elements>, reqwest::Error>>,
+    )>,
     mut sat: ResMut<SatInfo>,
 ) {
     tasks.iter_mut().for_each(|(e, mut t)| {
@@ -94,13 +107,19 @@ fn receive_task(
             if t.0.as_ref().unwrap().is_finished() {
                 let s = t.0.take().unwrap();
                 let res = rt.0.block_on(s).unwrap();
-                let mut sat_info = SatInfo::default();
-                for elements in res {
-                    sat_info.sats.insert(elements.norad_id, elements);
+                match res {
+                    Ok(res) => {
+                        let mut sat_info = SatInfo::default();
+                        for elements in res {
+                            sat_info.sats.insert(elements.norad_id, elements);
+                        }
+                        *sat = sat_info;
+                        info!("Meassge Received! {}", sat.sats.len());
+                    }
+                    Err(err) => {
+                        error!("Update TLE failed! {}", err);
+                    }
                 }
-                *sat = sat_info;
-                info!("Meassge Received! {}", sat.sats.len());
-                //evts.send(QueriedEvent::default());
             }
         }
 
@@ -122,7 +141,7 @@ fn update_sat_pos(
     use std::time::Instant;
     let _now = Instant::now();
     sats.iter_mut().for_each(|(ts, constants, mut pos, mut vel, n)| {
-        if let Ok((p, v)) = propagate_sat(ts.0 as f64, &constants.0) {
+        if let Ok((p, v)) = propagate_sat(&ts.0, &constants.0) {
             *pos = p;
             *vel = v;
         } else {
@@ -207,17 +226,78 @@ fn update_every_sat(mut cmd: Commands, satdata: Res<SatInfo>, sats: Query<(Entit
                 let s = satdata.sats.get(&id.0).unwrap();
                 let constants = sgp4::Constants::from_elements(s).unwrap();
                 cmd.entity(e).insert(SGP4Constants(constants));
-                cmd.entity(e).insert(TLETimeStamp(s.datetime.timestamp()));
+                cmd.entity(e).insert(TLETimeStamp(s.datetime));
                 cmd.entity(e).insert(Name::from(get_name(&satdata, &id)));
             }
         });
     }
 }
 
-pub fn init_sat_data(mut cmd: Commands, rt: Res<Runtime>) {
-    let s = rt.0.block_on(get_sat_data()).unwrap();
+pub fn init_sat_data(
+    mut cmd: Commands,
+    mut cache: ResMut<TLECacheConfig>,
+    timer: Res<QueryConfig>,
+    rt: Res<Runtime>,
+) {
+    //attempt read from file
+    let file = std::fs::File::open(cache.file.clone());
+    let mut tle = None;
+    let read_online = match file {
+        Ok(f) => {
+            let j = serde_json::from_reader::<_, Vec<Elements>>(f);
+            match j {
+                Ok(j) => {
+                    let sampled_time = j[0].datetime;
+                    let t = Utc::now().naive_utc();
+                    let dt = t - sampled_time;
+                    let d = timer.timer.duration();
+                    if dt.to_std().unwrap() > d {
+                        true
+                    } else {
+                        tle = Some(j);
+                        false
+                    }
+                }
+                Err(err) => {
+                    error!("cannot read {:?}: {}!", cache.file, err);
+                    true
+                }
+            }
+        }
+        Err(err) => {
+            error!("cannot open {:?}: {}!", cache.file, err);
+            true
+        }
+    };
+    if read_online {
+        //read from online
+        let data = rt.0.block_on(async { get_online_sat_data().await });
+        tle = match data {
+            Ok(data) => Some(data),
+            Err(err) => {
+                error!("cannot read tle from online {}!", err);
+                tle
+            }
+        };
+        if tle.is_some() {
+            let mut file = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .open(cache.file.clone()).unwrap();
+            file.write(
+                serde_json::to_string(tle.as_ref().unwrap())
+                    .unwrap()
+                    .as_bytes(),
+            )
+            .unwrap();
+        }
+    }
+    cache.cache = tle;
+    let s = cache.cache.as_ref().unwrap();
+    let js: Vec<Elements> = serde_json::from_value(serde_json::to_value(s).unwrap()).unwrap();
     let mut sat_info = SatInfo::default();
-    for elements in s {
+    for elements in js {
         sat_info.sats.insert(elements.norad_id, elements);
     }
     // for elements in s {
@@ -230,8 +310,9 @@ pub fn init_sat_data(mut cmd: Commands, rt: Res<Runtime>) {
         let id = SatID(elements.norad_id);
 
         let constants = sgp4::Constants::from_elements(elements).unwrap();
-        let ts = TLETimeStamp(elements.datetime.timestamp());
-        if let Ok((pos, vel)) = propagate_sat(ts.0 as f64, &constants) {
+
+        let ts = TLETimeStamp(elements.datetime);
+        if let Ok((pos, vel)) = propagate_sat(&ts.0, &constants) {
             cmd.spawn((
                 id,
                 SGP4Constants(constants),
@@ -253,14 +334,15 @@ pub fn init_sat_data(mut cmd: Commands, rt: Res<Runtime>) {
     cmd.insert_resource(sat_info);
 }
 
-fn propagate_sat(tlets: f64, constants: &Constants) -> Result<(TEMEPos, TEMEVelocity), ()> {
-    let ts = std::time::SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs_f64();
-    let ts = ts - tlets;
-
-    if let Ok(prediction) = constants.propagate(MinutesSinceEpoch(ts / 60.0)) {
+fn propagate_sat(
+    init_ts: &NaiveDateTime,
+    constants: &Constants,
+) -> Result<(TEMEPos, TEMEVelocity), ()> {
+    let ts = chrono::Utc::now();
+    let ts = ts.naive_utc() - *init_ts;
+    if let Ok(prediction) = constants.propagate(sgp4::MinutesSinceEpoch(
+        ts.to_std().unwrap().as_secs_f64() / 60.0,
+    )) {
         let (pos, vel) = (
             TEMEPos(prediction.position),
             TEMEVelocity(prediction.velocity),
@@ -277,7 +359,17 @@ pub struct SGP4Plugin;
 
 impl Plugin for SGP4Plugin {
     fn build(&self, app: &mut App) {
-        let rt = Runtime(tokio::runtime::Runtime::new().unwrap());
+        let rt = Runtime(
+            Builder::new_multi_thread()
+                .enable_all()
+                .worker_threads(4)
+                .build()
+                .unwrap(),
+        );
+        app.insert_resource(TLECacheConfig {
+            file: "./tle.json".into(),
+            cache: None,
+        });
         app.insert_resource(QueryConfig {
             timer: Timer::new(Duration::from_secs(60 * 24 * 24), TimerMode::Repeating),
         });
