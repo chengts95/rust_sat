@@ -245,13 +245,16 @@ pub fn init_sat_data(
     let read_online = match file {
         Ok(f) => {
             let j = serde_json::from_reader::<_, Vec<Elements>>(f);
+      
             match j {
+             
                 Ok(j) => {
                     let sampled_time = j[0].datetime;
                     let t = Utc::now().naive_utc();
                     let dt = t - sampled_time;
                     let d = timer.timer.duration();
-                    if dt.to_std().unwrap() > d {
+
+                    if dt.to_std().unwrap() > 7 * d {
                         true
                     } else {
                         tle = Some(j);
@@ -269,6 +272,7 @@ pub fn init_sat_data(
             true
         }
     };
+    println!("j:{:?}", read_online);
     if read_online {
         //read from online
         let data = rt.0.block_on(async { get_online_sat_data().await });
