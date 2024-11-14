@@ -7,7 +7,6 @@ use bevy_prototype_lyon::prelude::*;
 #[derive(Component, Default)]
 pub struct GroundStationID(pub u64);
 
-
 #[derive(Default, Resource)]
 pub struct GSConfigs {
     pub color: Color,
@@ -38,15 +37,18 @@ pub struct GroundStationBundle {
 // }
 pub fn distance_update(
     mut commands: Commands,
-    mut q: Query<(Entity,&GroundStationID, &LatLonAlt)>,
+    mut q: Query<(Entity, &GroundStationID, &LatLonAlt)>,
     sats: Query<(Entity, &SatID, &LatLonAlt)>,
 ) {
-    q.iter_mut().for_each(|(entity,_id, gs_llt)| {
+    q.iter_mut().for_each(|(entity, _id, gs_llt)| {
         let res = sats
             .iter()
             .map(|(e, _, llt)| {
-                let dis = distance::ground_space_distance((gs_llt.0 .0, gs_llt.0 .1), (llt.0.0,llt.0.1,1000.0*llt.0.2));
-        
+                let dis = distance::ground_space_distance(
+                    (gs_llt.0 .0, gs_llt.0 .1),
+                    (llt.0 .0, llt.0 .1, 1000.0 * llt.0 .2),
+                );
+
                 NearestSat {
                     eid: e,
                     distance: dis,
@@ -56,8 +58,7 @@ pub fn distance_update(
         if res.is_none() {
             return;
         }
-        commands.entity(entity).insert( res.unwrap());
-
+        commands.entity(entity).insert(res.unwrap());
     });
 }
 pub fn print_gs(q: Query<(&GroundStationID, &Transform)>) {
@@ -70,7 +71,6 @@ fn shape_ground_station(
     mut commands: Commands,
     color: Res<GSConfigs>,
     q: Query<(Entity, &WorldCoord, &Name), (With<GroundStationID>, Added<WorldCoord>)>,
-
 ) {
     if q.is_empty() {
         return;
@@ -91,14 +91,12 @@ fn shape_ground_station(
             center: Vec2::ZERO,
         };
         let shape = ShapeBundle {
-            path:GeometryBuilder::build_as(
-                &shape,
-            ),
-            spatial:SpatialBundle::from_transform(transform),
+            path: GeometryBuilder::build_as(&shape),
+            spatial: SpatialBundle::from_transform(transform),
             ..Default::default()
         };
 
-        commands.entity(e).insert((shape,Fill::color(color.color)));
+        commands.entity(e).insert((shape, Fill::color(color.color)));
         commands.entity(e).clear_children();
         commands.entity(e).with_children(|parent| {
             parent.spawn(Text2dBundle {
@@ -110,14 +108,9 @@ fn shape_ground_station(
     });
 }
 
-fn color_update(
-
-    color: Res<GSConfigs>,
-    mut q: Query<& mut Fill, With<GroundStationID>>,
-
-) {
+fn color_update(color: Res<GSConfigs>, mut q: Query<&mut Fill, With<GroundStationID>>) {
     if color.is_changed() {
-        q.iter_mut().for_each(| mut c| {
+        q.iter_mut().for_each(|mut c| {
             *c = Fill::color(color.color);
         });
     }
@@ -130,8 +123,7 @@ impl Plugin for GSPlugin {
         //app.add_system_to_stage(CoreStage::PreUpdate, distance_init);
         app.add_systems(PostUpdate, distance_update);
         //app.add_systems(print_gs);
-        app.add_systems( PreUpdate, shape_ground_station);
-        app.add_systems( Update,color_update.in_set(SatRenderStage::SatRenderUpdate));
-
+        app.add_systems(PreUpdate, shape_ground_station);
+        app.add_systems(Update, color_update.in_set(SatRenderStage::SatRenderUpdate));
     }
 }

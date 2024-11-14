@@ -1,7 +1,9 @@
-use bevy::{color::palettes::css::GREEN, ecs::schedule::ScheduleLabel, prelude::*, render::view::NoFrustumCulling, time::common_conditions::{on_real_timer, on_timer}};
-use bevy_prototype_lyon::{prelude::*};
+use bevy::{
+    color::palettes::css::GREEN, prelude::*, render::view::NoFrustumCulling,
+    time::common_conditions::on_real_timer,
+};
+use bevy_prototype_lyon::prelude::*;
 use std::time::Duration;
-
 
 use crate::{
     celestrak::{LatLonAlt, SatID, TEMEPos},
@@ -194,14 +196,13 @@ pub fn init_data_link(
         t.translation.z = 1.0f32;
         let stroke = Stroke::new(GREEN, 0.1);
         let shape = ShapeBundle {
-            path:line ,
+            path: line,
             spatial: SpatialBundle::from_transform(t),
             ..Default::default()
         };
         commands
             .entity(entity)
-            .insert((NoFrustumCulling,shape,stroke))
-            ;
+            .insert((NoFrustumCulling, shape, stroke));
     });
 }
 
@@ -254,14 +255,23 @@ impl Plugin for DatalinkPlugin {
                 .chain(),
         );
 
-        app.configure_sets(Update,LinkRenderStage::RenderUpdate.after(SatRenderStage::SatRenderUpdate));
-        app.add_systems(Update,rebuild_gslinks.run_if(on_real_timer(Duration::from_secs_f32(10.0))));
+        app.configure_sets(
+            Update,
+            LinkRenderStage::RenderUpdate.after(SatRenderStage::SatRenderUpdate),
+        );
+        app.add_systems(
+            Update,
+            rebuild_gslinks.run_if(on_real_timer(Duration::from_secs_f32(10.0))),
+        );
         // .with_system(
         //     rebuild_gslinks
         //         .with_run_criteria(FixedTimestep::step(10.0))
         //         .after(update_data_link),
         // )
 
-        app.add_systems(Update,compute_latency.in_set(LinkRenderStage::RenderUpdate));
+        app.add_systems(
+            Update,
+            compute_latency.in_set(LinkRenderStage::RenderUpdate),
+        );
     }
 }

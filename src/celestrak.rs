@@ -9,15 +9,15 @@ use std::{
     collections::HashMap,
     fs::OpenOptions,
     io::{Read, Write},
-    path::{Path, PathBuf},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    path::PathBuf,
+    time::Duration,
 };
 
 use chrono::{DateTime, Timelike, Utc};
-use chrono::{Datelike, NaiveDate, NaiveDateTime, NaiveTime};
+use chrono::{Datelike, NaiveDateTime};
 
 use serde::{Deserialize, Serialize};
-use sgp4::{Constants, Elements, MinutesSinceEpoch};
+use sgp4::{Constants, Elements};
 
 //https://celestrak.org/NORAD/elements/gp.php?GROUP=STARLINK&FORMAT=TLE
 pub(crate) async fn get_online_sat_data() -> Result<Vec<sgp4::Elements>, reqwest::Error> {
@@ -140,14 +140,15 @@ fn update_sat_pos(
 ) {
     use std::time::Instant;
     let _now = Instant::now();
-    sats.iter_mut().for_each(|(ts, constants, mut pos, mut vel, n)| {
-        if let Ok((p, v)) = propagate_sat(&ts.0, &constants.0) {
-            *pos = p;
-            *vel = v;
-        } else {
-            error!("{} diverged", n.as_str());
-        }
-    });
+    sats.iter_mut()
+        .for_each(|(ts, constants, mut pos, mut vel, n)| {
+            if let Ok((p, v)) = propagate_sat(&ts.0, &constants.0) {
+                *pos = p;
+                *vel = v;
+            } else {
+                error!("{} diverged", n.as_str());
+            }
+        });
 }
 
 fn ecef_to_wgs84(x: f64, y: f64, z: f64) -> (f64, f64, f64) {
@@ -245,9 +246,8 @@ pub fn init_sat_data(
     let read_online = match file {
         Ok(f) => {
             let j = serde_json::from_reader::<_, Vec<Elements>>(f);
-      
+
             match j {
-             
                 Ok(j) => {
                     let sampled_time = j[0].datetime;
                     let t = Utc::now().naive_utc();
@@ -288,7 +288,8 @@ pub fn init_sat_data(
                 .read(true)
                 .write(true)
                 .create(true)
-                .open(cache.file.clone()).unwrap();
+                .open(cache.file.clone())
+                .unwrap();
             file.write(
                 serde_json::to_string(tle.as_ref().unwrap())
                     .unwrap()
@@ -379,13 +380,13 @@ impl Plugin for SGP4Plugin {
         });
         app.insert_resource(rt);
         app.insert_resource(SatInfo::default());
-        app.add_systems(Startup,init_sat_data);
-        app.add_systems(PreUpdate,update_data);
-        app.add_systems(Update,
-            (receive_task, update_every_sat, update_sat_pos)
-                .chain()
+        app.add_systems(Startup, init_sat_data);
+        app.add_systems(PreUpdate, update_data);
+        app.add_systems(
+            Update,
+            (receive_task, update_every_sat, update_sat_pos).chain(),
         );
 
-        app.add_systems(Update,update_lonlat);
+        app.add_systems(Update, update_lonlat);
     }
 }

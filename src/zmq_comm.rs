@@ -1,4 +1,7 @@
-use std::{string::String, time::{SystemTime, Duration}};
+use std::{
+    string::String,
+    time::{Duration, SystemTime},
+};
 
 use bevy::{app::AppExit, prelude::*, time::common_conditions::on_timer};
 
@@ -76,12 +79,11 @@ pub struct CommStage;
 
 impl Plugin for ZMQPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup,connect_sockets);
+        app.add_systems(Startup, connect_sockets);
 
         app.add_systems(
             PostUpdate,
-            publish_data
-                .run_if(on_timer(Duration::from_secs_f32(1.0/60.0))),
+            publish_data.run_if(on_timer(Duration::from_secs_f32(1.0 / 60.0))),
         );
         //app.configure_set(CommStage.after(CoreSet::PostUpdate));
     }

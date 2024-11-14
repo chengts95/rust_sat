@@ -1,12 +1,10 @@
 use std::f64::consts::PI;
 
 use bevy::{
-    color::palettes::css::YELLOW,
     prelude::*,
     sprite::{MaterialMesh2dBundle, Mesh2dHandle},
     window::WindowResized,
 };
-use bevy_prototype_lyon::prelude::*;
 
 use crate::{celestrak::SatID, SatConfigs};
 

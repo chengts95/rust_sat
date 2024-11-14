@@ -1,7 +1,13 @@
 //"https://satellitemap.space/json"
 
 use bevy::{
-    asset::load_internal_binary_asset, color::palettes::css::YELLOW, input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel}, prelude::*, render::view::NoFrustumCulling, sprite::Mesh2dHandle, window::PrimaryWindow
+    asset::load_internal_binary_asset,
+    color::palettes::css::YELLOW,
+    input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel},
+    prelude::*,
+    render::view::NoFrustumCulling,
+    sprite::Mesh2dHandle,
+    window::PrimaryWindow,
 };
 use bevy_egui::{egui, EguiContexts, EguiPlugin, EguiSet};
 use bevy_embedded_assets::EmbeddedAssetPlugin;
@@ -15,13 +21,9 @@ use sgp4::Orbit;
 use std::{
     collections::HashMap,
     env,
-    future::IntoFuture,
-    time::{self, SystemTime, UNIX_EPOCH},
+    time::{SystemTime, UNIX_EPOCH},
 };
-use tokio::{
-    sync::oneshot::{self, error::TryRecvError},
-    task::JoinHandle,
-};
+use tokio::sync::oneshot::{self, error::TryRecvError};
 
 use bevy_svg::prelude::*;
 pub mod celestrak;
@@ -412,7 +414,6 @@ fn main() {
     app.configure_sets(Update, EguiUISet.after(EguiSet::InitContexts));
     // app.add_systems(test);
 
-
     load_internal_binary_asset!(
         app,
         TextStyle::default().font,
@@ -580,7 +581,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn(GSDataLink(edge)).insert(Name::new("卡多线"));
 
     let s = asset_server.load_folder("fonts");
-    println!("{:?}",s);
+    println!("{:?}", s);
     commands.insert_resource(CursorPosition(Vec2 { x: 0.0, y: 0.0 }));
     // let mut camera = Camera2dBundle::default();
 
