@@ -188,27 +188,31 @@ fn color_update(
     }
 }
 fn update_labels(
-    q: Query<(&LatLonAlt, &Children), Changed<LatLonAlt>>,
-    mut cq: Query<(&mut Text, &SatLabel, &InheritedVisibility)>,
+    q: Query<(&LatLonAlt, &Children, &InheritedVisibility), Changed<LatLonAlt>>,
+    mut cq: Query<(&mut Text, &SatLabel)>,
 ) {
     // let mut ss = 0;
-    q.iter().for_each(|(lla, children)| {
-        for child in children {
-            if let Ok((mut text, label, vis)) = cq.get_mut(*child) {
-                if !vis.get() {
-                    // ss += 1;
-                    continue;
-                }
-                match *label {
-                    SatLabel::Name => {}
-                    SatLabel::Coord => {
-                        text.sections[0].value = format!("{:.2}°,{:.2}°", lla.0 .1, lla.0 .0)
-                    }
-                    SatLabel::Alt => text.sections[0].value = format!("{:.2} km", lla.0 .2),
-                }
+    q.iter()
+        .filter_map(|(lla, children, &vis)| {
+            if !vis.get() {
+                return None;
             }
-        }
-    });
+            return Some((lla, children));
+        })
+        .for_each(|(lla, children)| {
+            // ss += 1;
+            children.iter().for_each(|child| {
+                if let Ok((mut text, label)) = cq.get_mut(*child) {
+                    match label {
+                        SatLabel::Name => {}
+                        SatLabel::Coord => {
+                            text.sections[0].value = format!("{:.2}°,{:.2}°", lla.0 .1, lla.0 .0)
+                        }
+                        SatLabel::Alt => text.sections[0].value = format!("{:.2} km", lla.0 .2),
+                    }
+                }
+            })
+        });
 }
 fn shape_satellite(
     mut commands: Commands,

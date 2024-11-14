@@ -348,45 +348,35 @@ fn config_ui(
 }
 
 /// Generates a table for displaying satellite data.
+/// Generates a table for displaying satellite data with specified column headers.
 fn create_table<'a, T: ExactSizeIterator + Iterator<Item = &'a [String; 7]>>(
     ui: &mut egui::Ui,
-    iter: T,
+    mut iter: T,
 ) {
-    let v: Vec<_> = iter.collect();
-    let _tb = egui_extras::TableBuilder::new(ui)
-        .columns(egui_extras::Column::remainder().resizable(true), 7)
+    // Define headers and column generator to reduce duplicate code
+    let headers = [
+        "Entity ID", 
+        "Norad ID", 
+        "Name", 
+        "TEME Coord", 
+        "TEME Velocity", 
+        "Latitude,Longitude,Altitude", 
+        "Inclination"
+    ];
+
+    egui_extras::TableBuilder::new(ui)
+        .columns(egui_extras::Column::remainder().resizable(true), headers.len())
         .header(50.0, |mut header| {
-            header.col(|ui| {
-                ui.heading("Entity ID");
-            });
-
-            header.col(|ui| {
-                ui.heading("Norad ID");
-            });
-            header.col(|ui| {
-                ui.heading("Name");
-            });
-            header.col(|ui| {
-                ui.heading("TEME Coord");
-            });
-
-            header.col(|ui| {
-                ui.heading("TEME Velocity");
-            });
-            header.col(|ui| {
-                ui.heading("Latitude,Longitude,Altitude");
-            });
-            header.col(|ui| {
-                ui.heading("inclination");
-            });
+            for &title in &headers {
+                header.col(|ui| { ui.heading(title); });
+            }
         })
         .body(|body| {
-            body.rows(30.0, v.len(), |mut row| {
-                let row_index = row.index();
-                let a = &v[row_index];
-                for i in *a {
+            body.rows(30.0, iter.len(), |mut row| {
+                let data = iter.next().unwrap();
+                for cell in data {
                     row.col(|ui| {
-                        ui.text_edit_multiline(&mut i.as_str());
+                        ui.label(cell); // changed to `label` for simpler display
                     });
                 }
             });
