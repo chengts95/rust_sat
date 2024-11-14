@@ -1,12 +1,11 @@
 //"https://satellitemap.space/json"
 
 use bevy::{
-    color::palettes::css::YELLOW, input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel}, prelude::*, render::view::NoFrustumCulling, sprite::Mesh2dHandle, window::PrimaryWindow
+    asset::load_internal_binary_asset, color::palettes::css::YELLOW, input::mouse::{MouseMotion, MouseScrollUnit, MouseWheel}, prelude::*, render::view::NoFrustumCulling, sprite::Mesh2dHandle, window::PrimaryWindow
 };
 use bevy_egui::{egui, EguiContexts, EguiPlugin, EguiSet};
 use bevy_embedded_assets::EmbeddedAssetPlugin;
 use bevy_prototype_lyon::prelude::ShapePlugin;
-
 
 use datalink::{DatalinkPlugin, GSDataLink};
 
@@ -96,7 +95,7 @@ fn show_data(
                 ui.menu_button("view", |ui| {
                     if ui.button("reset zoom").clicked() {
                         let (mut camera, _) = cam.single_mut();
-                        camera.scale = 1024.0;
+                        camera.scale = 1.0;
                     }
                     if ui.button("center camera").clicked() {
                         let (_, mut camera) = cam.single_mut();
@@ -203,7 +202,6 @@ fn show_data(
                         println!("send");
                         let _ = tx.send(file);
                     });
-          
                 }
                 if let Some(mut rx) = satcfg.rx.take() {
                     match rx.try_recv() {
@@ -215,8 +213,8 @@ fn show_data(
                                     .unwrap()
                                     .as_secs_f64();
                                 use std::io::Write;
-                                let mut f = std::fs::File::create(filename.path())
-                                    .expect("create failed");
+                                let mut f =
+                                    std::fs::File::create(filename.path()).expect("create failed");
 
                                 for i in &satcfg.table_data {
                                     f.write(ts.to_string().as_bytes()).unwrap();
@@ -284,7 +282,7 @@ fn config_ui(
             ui.label("Ground Station Color:");
             if ui.color_edit_button_srgba(&mut srgba).changed() {
                 let (red, green, blue, alpha) = srgba.to_tuple();
-      
+
                 gscfg.color = Color::srgba_u8(red, green, blue, alpha);
             }
             ui.label("Clear Color:");
@@ -303,7 +301,7 @@ fn config_ui(
             if ui.color_edit_button_srgba(&mut srgba).changed() {
                 let (red, green, blue, alpha) = srgba.to_tuple();
 
-                cccfg.0 =  Color::srgba_u8(red, green, blue, alpha);
+                cccfg.0 = Color::srgba_u8(red, green, blue, alpha);
             }
         });
 }
@@ -385,11 +383,11 @@ fn main() {
     .add_plugins((
         bevy_svg::prelude::SvgPlugin,
         EguiPlugin,
-        // SatRenderPlugin,
-        // ShapePlugin,
-        // DatalinkPlugin,
+        SatRenderPlugin,
+        ShapePlugin,
+        DatalinkPlugin,
     ))
-    .add_systems(Startup,setup);
+    .add_systems(Startup, setup);
 
     app.add_plugins(SGP4Plugin);
     #[cfg(feature = "zmq_comm")]
@@ -398,26 +396,29 @@ fn main() {
         zmq.tx_address = "tcp://127.0.0.1:5551".into();
         zmq.rx_address = "tcp://127.0.0.1:5552".into();
         app.insert_resource(zmq);
- 
     }
     app.insert_resource(UIData::default());
-    app.add_systems(PreUpdate,retro_cam_input_handle.in_set(InputSet));
+    app.add_systems(PreUpdate, retro_cam_input_handle.in_set(InputSet));
 
     app.insert_resource(GSConfigs {
         color: bevy::prelude::Color::Srgba(YELLOW),
         visible: Default::default(),
     });
-    app.add_plugins((zmq_comm::ZMQPlugin, GSPlugin));
+    app.add_plugins(GSPlugin);
     //app.add_system_to_stage(CoreStage::PreUpdate, resize_map);
     app.add_systems(PreUpdate, get_cursor_coord);
-    app.add_systems(Update,check_vis);
-    app.add_systems(Update,show_data.in_set(EguiUISet));
-    app.configure_sets(
-        Update,
-        EguiUISet
-            .after(EguiSet::InitContexts)
-    );
+    //app.add_systems(Update,check_vis);
+    app.add_systems(Update, show_data.in_set(EguiUISet));
+    app.configure_sets(Update, EguiUISet.after(EguiSet::InitContexts));
     // app.add_systems(test);
+
+
+    load_internal_binary_asset!(
+        app,
+        TextStyle::default().font,
+        "../assets/fonts/simhei.ttf",
+        |bytes: &[u8], _path: String| { Font::try_from_bytes(bytes.to_vec()).unwrap() }
+    );
     app.run();
 }
 
@@ -503,45 +504,32 @@ fn retro_cam_input_handle(
             // }
         }
 
-        for _ev in ev_motion.read().into_iter(){}
+        for _ev in ev_motion.read().into_iter() {}
     });
 }
 
 fn check_vis(
-    q: Query<
-        (&OrthographicProjection, &GlobalTransform),
-        (With<Camera2d>, Changed<OrthographicProjection>),
-    >,
-    mut q2: Query<
-        (&mut Visibility, &GlobalTransform),
-        (With<Mesh2dHandle>, Without<NoFrustumCulling>),
-    >,
+    q2: Query<(&ViewVisibility, &GlobalTransform), (With<Mesh2dHandle>, Without<NoFrustumCulling>)>,
 ) {
-    q.iter().for_each(|(x, t2)| {
-        let dis = x.scale / 2.0;
-        let center = Vec2::new(t2.translation().x, t2.translation().y);
-        let lb = Vec2::new(center.x - dis, center.y - dis);
-        let rb = Vec2::new(center.x + dis, center.y + dis);
-        q2.iter_mut().for_each(|(mut vis, transform)| {
-            let s = transform.translation();
-            *vis = if s.x > lb.x && s.y > lb.y && s.x < rb.x && s.y < rb.y {
-                Visibility::Inherited
-            } else {
-                Visibility::Hidden
-            };
-        });
+    let mut visible = 0;
+    let mut total = 0;
+    q2.iter().for_each(|(vis, _transform)| {
+        if vis.get() {
+            visible += 1;
+        }
+        total += 1;
     });
+    bevy::log::info!("Visible:{} Total:{}", visible, total);
 }
 
 fn get_cursor_coord(
     mut commands: Commands,
     cc: Query<(&Camera, &GlobalTransform), With<Camera2d>>,
-    wnds: Query<(&Window,&PrimaryWindow)>,
+    wnds: Query<(&Window, &PrimaryWindow)>,
 ) {
     let (camera, camera_transform) = cc.single();
     // for wnd in wnds.iter()
-    let wnd = wnds.single().0;
-    {
+    if let Ok((wnd, _)) = wnds.get_single() {
         if let Some(screen_pos) = wnd.cursor_position() {
             let window_size = Vec2::new(wnd.width() as f32, wnd.height() as f32);
 
@@ -592,13 +580,11 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn(GSDataLink(edge)).insert(Name::new("卡多线"));
 
     let s = asset_server.load_folder("fonts");
-  
-   
-
+    println!("{:?}",s);
     commands.insert_resource(CursorPosition(Vec2 { x: 0.0, y: 0.0 }));
     // let mut camera = Camera2dBundle::default();
 
-    let mut camera = Camera2dBundle::new_with_far(0.5);
+    let mut camera = Camera2dBundle::new_with_far(1000.0);
 
     camera.transform.translation.x = 512.0;
     camera.transform.translation.y = 512.0;
