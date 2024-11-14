@@ -130,7 +130,7 @@ pub fn compute_latency(
             let mut dis = 0.0;
             if is_ground && b_is_sat {
                 let gs_llt = q3.get(a).unwrap().1;
-                let llt = q3.get(b).unwrap().1;
+                let llt = q2.get(b).unwrap().1;
                 dis = distance::ground_space_distance(
                     (gs_llt.0 .0, gs_llt.0 .1),
                     (llt.0 .0, llt.0 .1, 1000.0 * llt.0 .2),
@@ -146,7 +146,7 @@ pub fn compute_latency(
             }
 
             if is_sat && b_is_ground {
-                let gs_llt = q3.get(a).unwrap().1;
+                let gs_llt = q2.get(a).unwrap().1;
                 let llt = q3.get(b).unwrap().1;
                 dis = distance::ground_space_distance(
                     (gs_llt.0 .0, gs_llt.0 .1),
