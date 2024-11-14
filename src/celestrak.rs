@@ -1,7 +1,3 @@
-//7R7C44-NVYFK3-9VFVKJ-4X3J
-//"https://api.n2yo.com/rest/v1/satellite/"
-//tle/52997&apiKey=
-
 use bevy::prelude::*;
 use tokio::runtime::Builder;
 
@@ -13,58 +9,77 @@ use std::{
     time::Duration,
 };
 
-use chrono::{DateTime, Timelike, Utc};
-use chrono::{Datelike, NaiveDateTime};
-
+use chrono::{DateTime, Datelike, NaiveDateTime, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use sgp4::{Constants, Elements};
 
-//https://celestrak.org/NORAD/elements/gp.php?GROUP=STARLINK&FORMAT=TLE
+/// Fetches online satellite data from the CelesTrak website in JSON format.
+///
+/// # Returns
+/// Returns a list of `sgp4::Elements` containing satellite orbital elements.
 pub(crate) async fn get_online_sat_data() -> Result<Vec<sgp4::Elements>, reqwest::Error> {
-    let resp =//?GROUP=STARLINK
-        reqwest::get("https://celestrak.org/NORAD/elements/gp.php?GROUP=STARLINK&FORMAT=JSON")
-            .await?
-            .json::<Vec<sgp4::Elements>>()
-            .await;
-    resp
+    reqwest::get("https://celestrak.org/NORAD/elements/gp.php?GROUP=STARLINK&FORMAT=JSON")
+        .await?
+        .json::<Vec<sgp4::Elements>>()
+        .await
 }
-#[derive(Component, serde::Serialize, serde::Deserialize)]
+
+#[derive(Component, Serialize, Deserialize)]
+/// Component holding satellite orbital elements for calculations and simulations.
 pub struct CElements(sgp4::Elements);
+
 #[derive(Default, Component)]
+/// Component holding the name of the satellite.
 pub struct SatName(pub String);
 
 #[derive(Default, Component)]
+/// Component holding the unique satellite ID.
 pub struct SatID(pub u64);
+
 #[derive(Component)]
+/// Component wrapper for a task that runs in a separate Tokio runtime.
 pub struct TaskWrapper<T>(pub Option<tokio::task::JoinHandle<T>>);
+
 #[derive(Resource)]
+/// Resource used to configure satellite data query timers.
 pub struct QueryConfig {
     pub timer: Timer,
 }
+
 #[derive(Resource)]
+/// Resource holding configurations for the TLE (Two-Line Element) cache.
 pub struct TLECacheConfig {
     pub file: PathBuf,
     pub cache: Option<Vec<Elements>>,
 }
 
 #[derive(Default, Component)]
+/// Component representing the TEME (True Equator Mean Equinox) position.
 pub struct TEMEPos(pub [f64; 3]);
+
 #[derive(Default, Component)]
+/// Component representing the TEME velocity vector.
 pub struct TEMEVelocity(pub [f64; 3]);
 
 #[derive(Component)]
+/// Component holding constants for SGP4 (Simplified General Perturbations model).
 pub struct SGP4Constants(pub Constants);
 
 #[derive(Component)]
+/// Component holding latitude, longitude, and altitude for the satellite.
 pub struct LatLonAlt(pub (f64, f64, f64));
 
 #[derive(Component)]
+/// Component holding a timestamp for the TLE data.
 pub struct TLETimeStamp(pub NaiveDateTime);
+
 #[derive(Default, Serialize, Deserialize, Resource)]
+/// Resource to store satellite information, including orbital elements.
 pub struct SatInfo {
     pub sats: HashMap<u64, sgp4::Elements>,
 }
 
+/// Retrieves the name of a satellite given its ID.
 pub fn get_name(data: &Res<SatInfo>, id: &&SatID) -> String {
     data.sats
         .get(&id.0)
@@ -74,8 +89,12 @@ pub fn get_name(data: &Res<SatInfo>, id: &&SatID) -> String {
         .unwrap()
         .to_owned()
 }
+
 #[derive(Resource)]
+/// Resource for a Tokio runtime that manages async tasks.
 pub struct Runtime(pub tokio::runtime::Runtime);
+
+/// Spawns a new task to query satellite data every time the timer expires.
 fn update_data(
     mut cmd: Commands,
     rt: Res<Runtime>,
@@ -83,16 +102,13 @@ fn update_data(
     time: Res<bevy::time::Time>,
 ) {
     config.timer.tick(time.delta());
-
     if config.timer.finished() {
         let task = rt.0.spawn(async { get_online_sat_data().await });
         cmd.spawn(TaskWrapper(Some(task)));
-        // info!(
-        //     "Query the satellite info at {}",
-        //     time.seconds_since_startup()
-        // );
     }
 }
+
+/// Receives results from async tasks and updates the satellite information.
 fn receive_task(
     mut cmd: Commands,
     rt: Res<Runtime>,
@@ -103,32 +119,27 @@ fn receive_task(
     mut sat: ResMut<SatInfo>,
 ) {
     tasks.iter_mut().for_each(|(e, mut t)| {
-        if t.0.is_some() {
-            if t.0.as_ref().unwrap().is_finished() {
-                let s = t.0.take().unwrap();
-                let res = rt.0.block_on(s).unwrap();
-                match res {
-                    Ok(res) => {
-                        let mut sat_info = SatInfo::default();
-                        for elements in res {
-                            sat_info.sats.insert(elements.norad_id, elements);
-                        }
-                        *sat = sat_info;
-                        info!("Meassge Received! {}", sat.sats.len());
+        if let Some(task) = t.0.take() {
+            let res = rt.0.block_on(task).unwrap();
+            match res {
+                Ok(res) => {
+                    let mut sat_info = SatInfo::default();
+                    for elements in res {
+                        sat_info.sats.insert(elements.norad_id, elements);
                     }
-                    Err(err) => {
-                        error!("Update TLE failed! {}", err);
-                    }
+                    *sat = sat_info;
+                    info!("Message Received! {}", sat.sats.len());
+                }
+                Err(err) => {
+                    error!("Failed to update TLE! {}", err);
                 }
             }
         }
-
-        if t.0.is_none() {
-            cmd.entity(e).despawn();
-        }
+        cmd.entity(e).despawn();
     });
 }
 
+/// Updates satellite positions based on the latest timestamp and constants.
 fn update_sat_pos(
     mut sats: Query<(
         &TLETimeStamp,
@@ -138,8 +149,6 @@ fn update_sat_pos(
         &Name,
     )>,
 ) {
-    use std::time::Instant;
-    let _now = Instant::now();
     sats.iter_mut()
         .for_each(|(ts, constants, mut pos, mut vel, n)| {
             if let Ok((p, v)) = propagate_sat(&ts.0, &constants.0) {
@@ -151,50 +160,24 @@ fn update_sat_pos(
         });
 }
 
+/// Converts ECEF coordinates to WGS84 geodetic coordinates (latitude, longitude, altitude).
 fn ecef_to_wgs84(x: f64, y: f64, z: f64) -> (f64, f64, f64) {
     let a: f64 = 6_378_137.0;
     let f: f64 = 1.0 / 298.257223563;
     let b = a * (1.0 - f);
     let e_sq = 2.0 * f - f.powi(2);
     let ep_sq = (a.powi(2) - b.powi(2)) / a.powi(2);
-    // Calculate longitude
     let longitude = y.atan2(x);
-
-    // Calculate intermediate values
     let p = (x.powi(2) + y.powi(2)).sqrt();
     let phi = (z / (p * (1.0 - ep_sq))).atan();
-    //let phi = (z + eta * b * (beta.sin().powi(3))) / (p - ep_sq * a * (beta.cos().powi(3)));
-    // Calculate latitude
     let latitude = phi;
-
-    // Calculate altitude
     let v = 1.0 / (1.0 - e_sq * (latitude.sin().powi(2))).sqrt();
     let altitude = p * latitude.cos() + z * latitude.sin() - a / v;
 
     (latitude, longitude, altitude)
 }
 
-fn ecef_to_geodetic(x: f64, y: f64, z: f64) -> (f64, f64, f64) {
-    let a: f64 = 6378137.0; // Semi-major axis for WGS84
-    let e_squared: f64 = 0.00669437999014; // Square of the first eccentricity for WGS84
-    let e2: f64 = e_squared / (1.0 - e_squared);
-
-    let p = (x * x + y * y).sqrt();
-    let theta = (z / p * (1.0 - e_squared)).atan();
-
-    let sin_theta = theta.sin();
-    let cos_theta = theta.cos();
-
-    let num = z + e2 * a * sin_theta.powi(3);
-    let den = p - e_squared * a * cos_theta.powi(3);
-
-    let phi = num.atan2(den);
-    let lambda = y.atan2(x);
-    let sin_phi = phi.sin();
-    let n = a / (1.0 - e_squared * sin_phi * sin_phi).sqrt();
-    let h = p * phi.cos() + z * sin_phi - a * a / n;
-    (phi, lambda, h)
-}
+/// Updates the geographic coordinates (latitude, longitude, altitude) for each satellite.
 fn update_lonlat(mut cmd: Commands, sats: Query<(Entity, &TEMEPos), Changed<TEMEPos>>) {
     let datetime: DateTime<Utc> = Utc::now();
     sats.iter().for_each(|(e, pos)| {
@@ -386,7 +369,6 @@ impl Plugin for SGP4Plugin {
             Update,
             (receive_task, update_every_sat, update_sat_pos).chain(),
         );
-
         app.add_systems(Update, update_lonlat);
     }
 }
