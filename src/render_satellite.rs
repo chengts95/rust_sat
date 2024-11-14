@@ -1,6 +1,11 @@
 use std::f64::consts::PI;
 
-use bevy::{color::palettes::css::YELLOW, prelude::*, render::view::NoFrustumCulling, window::WindowResized};
+use bevy::{
+    color::palettes::css::YELLOW,
+    prelude::*,
+    sprite::{MaterialMesh2dBundle, Mesh2dHandle},
+    window::WindowResized,
+};
 use bevy_prototype_lyon::prelude::*;
 
 use crate::{celestrak::SatID, SatConfigs};
@@ -8,6 +13,8 @@ use crate::{celestrak::SatID, SatConfigs};
 use super::celestrak::LatLonAlt;
 #[derive(Default, Component)]
 pub struct WorldCoord(pub Vec2);
+#[derive(Default, Resource, Clone)]
+pub struct SatelliteMesh(pub Mesh2dHandle, pub Handle<ColorMaterial>);
 
 #[derive(Resource)]
 pub struct GoogleProjector {
@@ -82,7 +89,7 @@ fn show_label(
     cam2: Query<&OrthographicProjection, Added<OrthographicProjection>>,
     mut q: Query<&mut Visibility, With<SatLabel>>,
 ) {
-    let factor = 256.0;
+    let factor = 0.2;
     if !cam.is_empty() {
         let a = cam.single();
 
@@ -172,11 +179,14 @@ fn move_satellite(mut q: Query<(&mut Transform, &WorldCoord), Changed<WorldCoord
         transform.translation.y = coord.0.y;
     });
 }
-fn color_update(color: Res<SatConfigs>, mut q: Query<(&SatID, &mut Fill)>) {
-    if color.is_changed() {
-        q.iter_mut().for_each(|(_a, mut c)| {
-            *c = Fill::color(color.sat_color);
-        });
+fn color_update(
+    color: Res<SatConfigs>,
+    sat_mesh: Option<Res<SatelliteMesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    if color.is_changed() && sat_mesh.is_some() {
+        let a = materials.get_mut(&sat_mesh.unwrap().1).unwrap();
+        a.color = color.sat_color;
     }
 }
 fn update_labels(
@@ -205,34 +215,61 @@ fn update_labels(
 fn shape_satellite(
     mut commands: Commands,
     color: Res<SatConfigs>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    sat_mesh: Option<Res<SatelliteMesh>>,
     q: Query<(Entity, &WorldCoord, &Name), (Added<WorldCoord>, With<SatID>)>,
-
 ) {
+    use bevy::prelude::Circle;
+
     if q.is_empty() {
         return;
     }
- 
+
+    let color = color.sat_color;
+    let (mesh_handle, color) = match sat_mesh {
+        Some(mesh) => (mesh.0.clone(), mesh.1.clone()),
+        None => {
+            let mesh = (
+                Mesh2dHandle(meshes.add(Circle::default())),
+                materials.add(color),
+            );
+            let s = SatelliteMesh(mesh.0.clone(), mesh.1.clone());
+            commands.insert_resource(s);
+            mesh
+        }
+    };
 
     let text_style = TextStyle {
         font_size: 30.0,
         color: Color::WHITE,
         ..default()
     };
+
+    let bun = MaterialMesh2dBundle {
+        mesh: mesh_handle,
+        material: color,
+        transform: Transform::from_xyz(
+            // Distribute shapes from -X_EXTENT/2 to +X_EXTENT/2.
+            0.0, 0.0, 0.0,
+        ),
+        ..default()
+    };
     q.iter().for_each(|(e, lla, n)| {
         let xy = lla.0;
         let transform = Transform::from_xyz(xy.x, xy.y, 1.0);
-        let shape = shapes::Circle {
-            radius: 2.0 / 3.14,
-            center: Vec2::ZERO,
-        };
-        let shape = ShapeBundle {
-            path: GeometryBuilder::build_as(&shape),
-            spatial:SpatialBundle::from_transform(transform),
-            ..Default::default()
-        };
-        commands
-            .entity(e)
-            .insert((shape, Fill::color(color.sat_color)));
+        // let shape = shapes::Circle {
+        //     radius: 2.0 / 3.14,
+        //     center: Vec2::ZERO,
+        // };
+        // let shape = ShapeBundle {
+        //     path: GeometryBuilder::build_as(&shape),
+        //     spatial:SpatialBundle::from_transform(transform),
+        //     ..Default::default()
+        // };
+        let bun2 = bun.clone();
+
+        commands.entity(e).insert(bun2).insert(transform);
 
         commands.entity(e).with_children(|p| {
             for (i, label) in [
@@ -276,24 +313,13 @@ impl Plugin for SatRenderPlugin {
                 google_scaler_define,
                 color_update,
                 update_labels,
-            ).in_set(SatRenderStage::SatRenderUpdate)
-                
+            )
+                .in_set(SatRenderStage::SatRenderUpdate),
         );
 
         app.add_systems(PostUpdate, move_satellite);
         app.add_systems(PreUpdate, google_world_coord);
 
         app.add_systems(PreUpdate, show_label);
-        let shape = shapes::Circle {
-            radius: 2.0,
-            center: Vec2::ZERO,
-        };
-        let shape = ShapeBundle {
-            path: GeometryBuilder::build_as(&shape),
-            spatial:SpatialBundle::from_transform(Transform::from_xyz(0.0, 0.0, 0.0)),
-            ..Default::default()
-        };
-        bevy::log::info!("{:?}",shape.spatial);
-        app.world_mut().spawn((shape, Fill::color(YELLOW)));
     }
 }
