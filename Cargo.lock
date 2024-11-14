@@ -6852,8 +6852,3 @@ dependencies = [
  "quote",
  "syn 2.0.87",
 ]
-
-[[patch.unused]]
-name = "tuirealm"
-version = "2.0.3"
-source = "git+https://github.com/veeso/tui-realm#0a5932a6fe7f34981fc0c800e43417619ff6255c"

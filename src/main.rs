@@ -1,5 +1,6 @@
 //"https://satellitemap.space/json"
-
+#![allow(dead_code)]
+#![allow(unused_imports)]
 use bevy::{
     asset::load_internal_binary_asset,
     color::palettes::css::YELLOW,
