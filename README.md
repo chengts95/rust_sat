@@ -8,7 +8,7 @@
 
 - **SGP4 Orbit Propagation**: Computes precise satellite positions and velocities based on Rust SGP4 [crate](https://docs.rs/sgp4/latest/sgp4/).
 - **Real-time TLE Updates**: Automatically retrieves updated satellite TLE data from online sources such as CelesTrak, with caching support for offline usage.
-- **Multi-Satellite Tracking**: Supports simultaneous tracking of multiple satellites, including full Starlink constellation support.
+- **Plugin Based Design**: All functionalities are organized into plugin, allowing rapid adapation for various research purposes.
 - **Position Visualization**: Provides accurate satellite position and velocity data visualized through Bevy.
 
 ## Installation and Setup
@@ -46,4 +46,6 @@ RustSat automatically loads TLE data from a local cache (`./tle.json`). If the c
 
 With **RustSat**, experience the power of Rust and Bevy for real-time satellite tracking!
 ![image](https://github.com/user-attachments/assets/ab9c65db-4464-4d95-87a4-5bf2f4630123)
-
+## Citation
+This software was initally developed for
+[T. Cheng, T. Duan and V. Dinavahi, "Real-Time Cyber-Physical Digital Twin for Low Earth Orbit Satellite Constellation Network Enhanced Wide-Area Power Grid," in IEEE Open Journal of the Industrial Electronics Society, vol. 5, pp. 1029-1041, 2024, doi: 10.1109/OJIES.2024.3454010.](https://ieeexplore-ieee-org.login.ezproxy.library.ualberta.ca/document/10663871)
